@@ -5,20 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Delivery Note</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    input, button, canvas { margin: 5px 0; width: 100%; }
-    #serials li { margin-bottom: 5px; }
-    #signature-pad { border: 1px solid #ccc; }
-    #qr-reader { margin-top: 10px; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 520px; /* A5 width in pixels at 96dpi */
+      margin: auto;
+    }
+    input, button, canvas {
+      margin: 5px 0;
+      width: 100%;
+    }
+    #serials li {
+      margin-bottom: 5px;
+    }
+    #signature-pad {
+      border: 1px solid #ccc;
+    }
 
     @media print {
-      button, #qr-reader {
+      button {
         display: none !important;
       }
     }
+
+    @page {
+      size: A5;
+      margin: 10mm;
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
   <h2>Delivery Note</h2>
@@ -31,9 +46,7 @@
     <hr/>
     <label>Serial Number: <input type="text" id="serialInput" /></label>
     <button onclick="addSerial()">Add Serial</button>
-    <button onclick="startScanner()">Scan QR/Barcode</button>
     <ul id="serials"></ul>
-    <div id="qr-reader" style="width: 300px;"></div>
     <hr/>
     <p><strong>Signature of Receiver:</strong></p>
     <canvas id="signature-pad" width="500" height="150"></canvas>
@@ -83,26 +96,15 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    // QR Scanner
-    let qrScanner;
-    function startScanner() {
-      const qrDiv = document.getElementById('qr-reader');
-      qrDiv.innerHTML = ''; // Clear previous
-      qrScanner = new Html5Qrcode("qr-reader");
-      qrScanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        (decodedText) => {
-          addSerial(decodedText);
-          qrScanner.stop().then(() => qrDiv.innerHTML = '');
-        },
-        (error) => console.warn(error)
-      );
-    }
-
     // Export PDF
     function exportPDF() {
-      html2pdf().set({ margin: 10, filename: 'delivery_note.pdf' }).from(document.getElementById('note')).save();
+      const opt = {
+        margin: 10,
+        filename: 'delivery_note.pdf',
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+        jsPDF: { unit: 'mm', format: 'a5', orientation: 'portrait' }
+      };
+      html2pdf().set(opt).from(document.getElementById('note')).save();
     }
   </script>
 </body>
