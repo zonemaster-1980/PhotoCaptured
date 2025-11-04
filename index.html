@@ -1,156 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>Delivery Note</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    input, button, canvas, select { margin: 5px 0; width: 100%; }
-    #serials li { margin-bottom: 5px; }
-    #signature-pad { border: 1px solid #ccc; touch-action: none; }
-    #qr-reader { margin-top: 10px; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+
+    .no-print {
+      margin: 10px 0;
+    }
+
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+    }
+
+    #serialList {
+      list-style-type: none;
+      padding-left: 0;
+    }
+
+    #serialList li {
+      margin-bottom: 5px;
+    }
+
+    #totalBox {
+      border: 1px solid #000;
+      padding: 10px;
+      margin-top: 20px;
+      width: fit-content;
+      font-weight: bold;
+    }
+
+    #signatureBox {
+      margin-top: 30px;
+    }
+
+    #signatureCanvas {
+      border: 1px solid #000;
+      width: 100%;
+      height: 150px;
+    }
+
+    .big-button {
+      font-size: 20px;
+      padding: 14px 24px;
+      border-radius: 8px;
+      min-width: 160px;
+      min-height: 48px;
+    }
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
+
   <h2>Delivery Note</h2>
-  <div id="note">
-    <p><strong>Note #:</strong> <span id="noteNumber"></span></p>
-    <p><strong>Date:</strong> <span id="noteDate"></span></p>
-    <label>To: <input type="text" id="toField" /></label>
-    <label>From: <input type="text" id="fromField" /></label>
-    <p><strong>Model Unit:</strong> Lenovo Chromebook</p>
-    <hr/>
-    <label>Serial Number: <input type="text" id="serialInput" /></label>
-    <button onclick="addSerial()">Add Serial</button>
-    <button onclick="startScanner()">Scan QR/Barcode</button>
-    <select id="cameraSelect"></select>
-    <ul id="serials"></ul>
-    <div id="qr-reader" style="width: 100%;"></div>
-    <hr/>
-    <p><strong>Signature of Receiver:</strong></p>
-    <canvas id="signature-pad" width="500" height="150"></canvas>
-    <button onclick="clearSignature()">Clear Signature</button>
-    <hr/>
-    <button onclick="exportPDF()">Export as PDF</button>
+
+  <input type="text" id="serialInput" placeholder="Scan or enter serial" autofocus class="no-print">
+
+  <button class="big-button no-print" onclick="addSerial()">Add Serial</button>
+  <button class="big-button no-print" onclick="scanQR()">Scan QR/Barcode</button>
+  <button class="big-button no-print" onclick="exportPDF()">Export as PDF</button>
+  <button class="big-button no-print" onclick="window.print()">Print</button>
+
+  <ul id="serialList"></ul>
+
+  <div id="totalBox">
+    Total: <span id="totalCount">0</span>
+  </div>
+
+  <div id="signatureBox">
+    <label>Receiver Signature:</label>
+    <canvas id="signatureCanvas"></canvas>
   </div>
 
   <script>
-    document.getElementById('noteNumber').textContent = 'DN-' + Date.now();
-    document.getElementById('noteDate').textContent = new Date().toISOString().split('T')[0];
+    let serials = [];
 
-    function addSerial(value = null) {
-      const input = document.getElementById('serialInput');
-      const sn = value || input.value.trim();
-      if (sn) {
-        const li = document.createElement('li');
-        li.textContent = sn;
-        document.getElementById('serials').appendChild(li);
-        input.value = '';
+    function addSerial() {
+      const input = document.getElementById("serialInput");
+      const value = input.value.trim();
+      if (value) {
+        serials.push(value);
+        updateSerialList();
+        input.value = "";
+        input.focus();
       }
     }
 
-    // Signature pad
-    const canvas = document.getElementById('signature-pad');
-    const ctx = canvas.getContext('2d');
-    let drawing = false;
-
-    canvas.addEventListener('touchstart', () => drawing = true);
-    canvas.addEventListener('touchend', () => {
-      drawing = false;
-      ctx.beginPath();
-    });
-    canvas.addEventListener('touchmove', drawTouch);
-
-    canvas.addEventListener('mousedown', () => drawing = true);
-    canvas.addEventListener('mouseup', () => {
-      drawing = false;
-      ctx.beginPath();
-    });
-    canvas.addEventListener('mousemove', drawMouse);
-
-    function drawMouse(e) {
-      if (!drawing) return;
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#000';
-      ctx.lineTo(e.offsetX, e.offsetY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(e.offsetX, e.offsetY);
-    }
-
-    function drawTouch(e) {
-      if (!drawing) return;
-      const rect = canvas.getBoundingClientRect();
-      const touch = e.touches[0];
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#000';
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    }
-
-    function clearSignature() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    // QR Scanner with smart camera selection
-    let qrScanner;
-    let cameras = [];
-
-    Html5Qrcode.getCameras().then(devices => {
-      cameras = devices;
-      const select = document.getElementById('cameraSelect');
-      select.innerHTML = '';
-
-      devices.forEach((device, index) => {
-        const option = document.createElement('option');
-        option.value = device.id;
-        option.text = device.label || `Camera ${index + 1}`;
-        select.appendChild(option);
+    function updateSerialList() {
+      const list = document.getElementById("serialList");
+      list.innerHTML = "";
+      serials.forEach((serial, index) => {
+        const item = document.createElement("li");
+        item.textContent = `${index + 1}. ${serial}`;
+        list.appendChild(item);
       });
+      document.getElementById("totalCount").textContent = serials.length;
+    }
 
-      // Auto-select rear camera if available
-      const rearCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment'));
-      if (rearCam) {
-        select.value = rearCam.id;
-      } else if (devices.length > 1) {
-        select.value = devices[1].id; // fallback to second camera
-      }
-    }).catch(err => {
-      console.error("Camera access error:", err);
-      alert("Unable to access camera. Make sure permissions are granted.");
-    });
-
-    function startScanner() {
-      const qrDiv = document.getElementById('qr-reader');
-      qrDiv.innerHTML = ''; // Clear previous scanner
-      const selectedCameraId = document.getElementById('cameraSelect').value;
-      qrScanner = new Html5Qrcode("qr-reader");
-
-      qrScanner.start(
-        selectedCameraId,
-        { fps: 10, qrbox: 250 },
-        (decodedText) => {
-          addSerial(decodedText);
-          qrScanner.stop().then(() => qrDiv.innerHTML = '');
-        },
-        (errorMessage) => {
-          console.warn("QR scan error:", errorMessage);
-        }
-      );
+    function scanQR() {
+      alert("QR scanning is handled by external scanner or native app.");
     }
 
     function exportPDF() {
-      html2pdf().set({ margin: 10, filename: 'delivery_note.pdf' }).from(document.getElementById('note')).save();
+      alert("PDF export logic goes here (e.g., html2pdf.js).");
     }
   </script>
+
 </body>
 </html>
