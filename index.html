@@ -8,7 +8,7 @@
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, button, canvas { margin: 5px 0; width: 100%; }
     #serials li { margin-bottom: 5px; }
-    #signature-pad { border: 1px solid #ccc; }
+    #signature-pad { border: 1px solid #ccc; touch-action: none; }
     #qr-reader { margin-top: 10px; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -100,18 +100,17 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    // QR Scanner
-    let qrScanner;
+    // QR Scanner with rear camera preference
     function startScanner() {
       const qrDiv = document.getElementById('qr-reader');
       qrDiv.innerHTML = ''; // Clear previous scanner
-      qrScanner = new Html5Qrcode("qr-reader");
+      const qrScanner = new Html5Qrcode("qr-reader");
 
       Html5Qrcode.getCameras().then(devices => {
         if (devices && devices.length) {
-          const cameraId = devices[0].id;
+          const backCam = devices.find(d => d.label.toLowerCase().includes('back')) || devices[0];
           qrScanner.start(
-            cameraId,
+            backCam.id,
             { fps: 10, qrbox: 250 },
             (decodedText) => {
               addSerial(decodedText);
@@ -130,11 +129,9 @@
       });
     }
 
-    // Export PDF
     function exportPDF() {
       html2pdf().set({ margin: 10, filename: 'delivery_note.pdf' }).from(document.getElementById('note')).save();
     }
   </script>
 </body>
 </html>
-
