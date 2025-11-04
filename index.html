@@ -8,18 +8,21 @@
     body {
       font-family: Arial, sans-serif;
       padding: 20px;
-      max-width: 520px; /* A5 width in pixels at 96dpi */
+      max-width: 520px; /* A5 width at 96dpi */
       margin: auto;
     }
-    input, button, canvas {
+    input, button {
       margin: 5px 0;
       width: 100%;
     }
-    #serials li {
-      margin-bottom: 5px;
+    #serials {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 10px;
     }
-    #signature-pad {
-      border: 1px solid #ccc;
+    #serials li {
+      margin-bottom: 3px;
+      font-size: 14px;
     }
 
     @media print {
@@ -48,10 +51,6 @@
     <button onclick="addSerial()">Add Serial</button>
     <ul id="serials"></ul>
     <hr/>
-    <p><strong>Signature of Receiver:</strong></p>
-    <canvas id="signature-pad" width="500" height="150"></canvas>
-    <button onclick="clearSignature()">Clear Signature</button>
-    <hr/>
     <button onclick="exportPDF()">Export as PDF</button>
     <button onclick="window.print()">Print</button>
   </div>
@@ -71,32 +70,6 @@
       }
     }
 
-    // Signature pad
-    const canvas = document.getElementById('signature-pad');
-    const ctx = canvas.getContext('2d');
-    let drawing = false;
-
-    canvas.addEventListener('mousedown', () => drawing = true);
-    canvas.addEventListener('mouseup', () => {
-      drawing = false;
-      ctx.beginPath();
-    });
-    canvas.addEventListener('mousemove', draw);
-    function draw(e) {
-      if (!drawing) return;
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#000';
-      ctx.lineTo(e.offsetX, e.offsetY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(e.offsetX, e.offsetY);
-    }
-    function clearSignature() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    // Export PDF
     function exportPDF() {
       const opt = {
         margin: 10,
