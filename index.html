@@ -101,19 +101,29 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    // QR Scanner with camera switch
+    // QR Scanner with smart camera selection
     let qrScanner;
     let cameras = [];
 
     Html5Qrcode.getCameras().then(devices => {
       cameras = devices;
       const select = document.getElementById('cameraSelect');
+      select.innerHTML = '';
+
       devices.forEach((device, index) => {
         const option = document.createElement('option');
         option.value = device.id;
         option.text = device.label || `Camera ${index + 1}`;
         select.appendChild(option);
       });
+
+      // Auto-select rear camera if available
+      const rearCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment'));
+      if (rearCam) {
+        select.value = rearCam.id;
+      } else if (devices.length > 1) {
+        select.value = devices[1].id; // fallback to second camera
+      }
     }).catch(err => {
       console.error("Camera access error:", err);
       alert("Unable to access camera. Make sure permissions are granted.");
