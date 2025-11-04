@@ -52,8 +52,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
-  <h2>DELIVERY NOTE</h2>
   <div id="note">
+    <h2>DELIVERY NOTE</h2>
     <p><strong>Note #:</strong> <span id="noteNumber"></span></p>
     <p><strong>Date:</strong> <span id="noteDate"></span></p>
     <label>To: <input type="text" id="toField" /></label>
@@ -69,6 +69,7 @@
     <hr/>
     <button onclick="exportPDF()">Export as PDF</button>
     <button onclick="window.print()">Print</button>
+    <button onclick="sendEmail()">Send via Email</button>
   </div>
 
   <script>
@@ -106,6 +107,20 @@
       html2pdf().set(opt).from(note).save().then(() => {
         note.classList.remove('hide-buttons');
       });
+    }
+
+    function sendEmail() {
+      const to = document.getElementById('toField').value || 'Recipient';
+      const from = document.getElementById('fromField').value || 'Sender';
+      const total = document.getElementById('totalCount').textContent;
+      const serials = Array.from(document.getElementById('serials').children)
+        .map(li => li.textContent)
+        .join('\n');
+
+      const subject = "Delivery Note";
+      const body = `Delivery Note\n\nTo: ${to}\nFrom: ${from}\nModel Unit: Lenovo Chromebook\n${total}\n\nSerial Numbers:\n${serials}\n\nReceived By: ___________________`;
+
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
   </script>
 </body>
