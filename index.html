@@ -10,6 +10,12 @@
     #serials li { margin-bottom: 5px; }
     #signature-pad { border: 1px solid #ccc; }
     #qr-reader { margin-top: 10px; }
+
+    @media print {
+      button, #qr-reader {
+        display: none !important;
+      }
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
@@ -34,6 +40,7 @@
     <button onclick="clearSignature()">Clear Signature</button>
     <hr/>
     <button onclick="exportPDF()">Export as PDF</button>
+    <button onclick="window.print()">Print</button>
   </div>
 
   <script>
