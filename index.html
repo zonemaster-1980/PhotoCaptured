@@ -36,7 +36,7 @@
       }
     }
 
-    body.hide-buttons button {
+    #note.hide-buttons button {
       display: none !important;
     }
 
@@ -91,15 +91,16 @@
     }
 
     function exportPDF() {
-      document.body.classList.add('hide-buttons');
+      const note = document.getElementById('note');
+      note.classList.add('hide-buttons');
       const opt = {
         margin: 10,
         filename: 'delivery_note.pdf',
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
         jsPDF: { unit: 'mm', format: 'a5', orientation: 'portrait' }
       };
-      html2pdf().set(opt).from(document.getElementById('note')).save().then(() => {
-        document.body.classList.remove('hide-buttons');
+      html2pdf().set(opt).from(note).save().then(() => {
+        note.classList.remove('hide-buttons');
       });
     }
   </script>
