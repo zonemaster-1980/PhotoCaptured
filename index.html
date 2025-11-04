@@ -24,6 +24,10 @@
       margin-bottom: 3px;
       font-size: 14px;
     }
+    #totalCount {
+      font-weight: bold;
+      margin-top: 5px;
+    }
 
     @media print {
       button {
@@ -50,6 +54,9 @@
     <label>Serial Number: <input type="text" id="serialInput" /></label>
     <button onclick="addSerial()">Add Serial</button>
     <ul id="serials"></ul>
+    <p id="totalCount">Total Devices: 0</p>
+    <hr/>
+    <p><strong>Received By:</strong> ___________________</p>
     <hr/>
     <button onclick="exportPDF()">Export as PDF</button>
     <button onclick="window.print()">Print</button>
@@ -63,11 +70,19 @@
       const input = document.getElementById('serialInput');
       const sn = value || input.value.trim();
       if (sn) {
+        const serialsList = document.getElementById('serials');
         const li = document.createElement('li');
-        li.textContent = sn;
-        document.getElementById('serials').appendChild(li);
+        const count = serialsList.children.length + 1;
+        li.textContent = count + '. ' + sn;
+        serialsList.appendChild(li);
         input.value = '';
+        updateTotal();
       }
+    }
+
+    function updateTotal() {
+      const total = document.getElementById('serials').children.length;
+      document.getElementById('totalCount').textContent = 'Total Devices: ' + total;
     }
 
     function exportPDF() {
