@@ -6,9 +6,9 @@
   <title>Delivery Note</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    input, button, canvas, select { margin: 5px 0; width: 100%; }
+    input, button, canvas { margin: 5px 0; width: 100%; }
     #serials li { margin-bottom: 5px; }
-    #signature-pad { border: 1px solid #ccc; touch-action: none; }
+    #signature-pad { border: 1px solid #ccc; }
     #qr-reader { margin-top: 10px; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -26,9 +26,8 @@
     <label>Serial Number: <input type="text" id="serialInput" /></label>
     <button onclick="addSerial()">Add Serial</button>
     <button onclick="startScanner()">Scan QR/Barcode</button>
-    <select id="cameraSelect"></select>
     <ul id="serials"></ul>
-    <div id="qr-reader" style="width: 100%;"></div>
+    <div id="qr-reader" style="width: 300px;"></div>
     <hr/>
     <p><strong>Signature of Receiver:</strong></p>
     <canvas id="signature-pad" width="500" height="150"></canvas>
@@ -57,21 +56,13 @@
     const ctx = canvas.getContext('2d');
     let drawing = false;
 
-    canvas.addEventListener('touchstart', () => drawing = true);
-    canvas.addEventListener('touchend', () => {
-      drawing = false;
-      ctx.beginPath();
-    });
-    canvas.addEventListener('touchmove', drawTouch);
-
     canvas.addEventListener('mousedown', () => drawing = true);
     canvas.addEventListener('mouseup', () => {
       drawing = false;
       ctx.beginPath();
     });
-    canvas.addEventListener('mousemove', drawMouse);
-
-    function drawMouse(e) {
+    canvas.addEventListener('mousemove', draw);
+    function draw(e) {
       if (!drawing) return;
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
@@ -81,63 +72,28 @@
       ctx.beginPath();
       ctx.moveTo(e.offsetX, e.offsetY);
     }
-
-    function drawTouch(e) {
-      if (!drawing) return;
-      const rect = canvas.getBoundingClientRect();
-      const touch = e.touches[0];
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#000';
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    }
-
     function clearSignature() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    // QR Scanner with camera switch
+    // QR Scanner
     let qrScanner;
-    let cameras = [];
-
-    Html5Qrcode.getCameras().then(devices => {
-      cameras = devices;
-      const select = document.getElementById('cameraSelect');
-      devices.forEach((device, index) => {
-        const option = document.createElement('option');
-        option.value = device.id;
-        option.text = device.label || `Camera ${index + 1}`;
-        select.appendChild(option);
-      });
-    }).catch(err => {
-      console.error("Camera access error:", err);
-      alert("Unable to access camera. Make sure permissions are granted.");
-    });
-
     function startScanner() {
       const qrDiv = document.getElementById('qr-reader');
-      qrDiv.innerHTML = ''; // Clear previous scanner
-      const selectedCameraId = document.getElementById('cameraSelect').value;
+      qrDiv.innerHTML = ''; // Clear previous
       qrScanner = new Html5Qrcode("qr-reader");
-
       qrScanner.start(
-        selectedCameraId,
+        { facingMode: "environment" },
         { fps: 10, qrbox: 250 },
         (decodedText) => {
           addSerial(decodedText);
           qrScanner.stop().then(() => qrDiv.innerHTML = '');
         },
-        (errorMessage) => {
-          console.warn("QR scan error:", errorMessage);
-        }
+        (error) => console.warn(error)
       );
     }
 
+    // Export PDF
     function exportPDF() {
       html2pdf().set({ margin: 10, filename: 'delivery_note.pdf' }).from(document.getElementById('note')).save();
     }
