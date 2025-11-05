@@ -7,7 +7,7 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-image: url('bg.png');
+      background-image: url('bg.png'); /* Upload this image to your repo */
       background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
@@ -15,38 +15,65 @@
       max-width: 520px;
       margin: auto;
     }
+
     h2 {
       text-align: center;
       font-weight: bold;
+      margin-bottom: 20px;
     }
-    input, button {
-      margin: 5px 0;
+
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    input {
       width: 100%;
-      border-radius: 5px;
       padding: 6px;
+      margin-top: 4px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
     }
+
+    button {
+      padding: 8px;
+      margin: 10px 5px 0 0;
+      border-radius: 6px;
+      width: 48%;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
     #serials {
-      max-height: 300px;
+      max-height: 200px;
       overflow-y: auto;
+      margin-top: 10px;
       margin-bottom: 10px;
+      padding-left: 20px;
     }
+
     #serials li {
-      margin-bottom: 3px;
+      margin-bottom: 4px;
       font-size: 14px;
     }
+
     #totalCount {
       font-weight: bold;
       color: red;
       margin-top: 5px;
     }
+
     @media print {
       button {
         display: none !important;
       }
     }
+
     #note.hide-buttons button {
       display: none !important;
     }
+
     @page {
       size: A5;
       margin: 10mm;
@@ -59,17 +86,27 @@
     <h2>DELIVERY NOTE</h2>
     <p><strong>Note #:</strong> <span id="noteNumber"></span></p>
     <p><strong>Date:</strong> <span id="noteDate"></span></p>
-    <label>To: <input type="text" id="toField" /></label>
-    <label>From: <input type="text" id="fromField" /></label>
+
+    <label>From:</label>
+    <input type="text" id="fromField" placeholder="Enter sender name" />
+
+    <label>To:</label>
+    <input type="text" id="toField" placeholder="Enter recipient name" />
+
     <p><strong>Model Unit:</strong> Lenovo Chromebook</p>
     <hr/>
-    <label>Serial Number: <input type="text" id="serialInput" /></label>
+
+    <label>Serial Number:</label>
+    <input type="text" id="serialInput" placeholder="Enter serial number" />
     <button onclick="addSerial()">Add Serial</button>
+
     <ul id="serials"></ul>
     <p id="totalCount">Total: 0</p>
     <hr/>
+
     <p><strong>Received By:</strong> ___________________</p>
     <hr/>
+
     <button onclick="exportPDF()">Export as PDF</button>
     <button onclick="window.print()">Print</button>
   </div>
