@@ -50,12 +50,6 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
-  <script>
-    (function() {
-      emailjs.init("YOUR_PUBLIC_KEY"); // Replace with your EmailJS public key
-    })();
-  </script>
 </head>
 <body>
   <div id="note">
@@ -75,7 +69,6 @@
     <hr/>
     <button onclick="exportPDF()">Export as PDF</button>
     <button onclick="window.print()">Print</button>
-    <button onclick="sendEmailJS()">Send via Email</button>
   </div>
 
   <script>
@@ -102,39 +95,22 @@
     }
 
     function exportPDF() {
+      document.activeElement.blur(); // Ensure latest input is committed
       const note = document.getElementById('note');
       note.classList.add('hide-buttons');
+
       const opt = {
         margin: 10,
         filename: 'delivery_note.pdf',
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
         jsPDF: { unit: 'mm', format: 'a5', orientation: 'portrait' }
       };
-      html2pdf().set(opt).from(note).save().then(() => {
-        note.classList.remove('hide-buttons');
-      });
-    }
 
-    function sendEmailJS() {
-      const toEmail = prompt("Enter recipient email:");
-      if (!toEmail) return;
-
-      const to = document.getElementById('toField').value || 'Recipient';
-      const from = document.getElementById('fromField').value || 'Sender';
-      const total = document.getElementById('totalCount').textContent;
-      const serials = Array.from(document.getElementById('serials').children)
-        .map(li => li.textContent)
-        .join('\n');
-
-      const templateParams = {
-        to_email: toEmail,
-        subject: "Delivery Note",
-        message: `Delivery Note\n\nTo: ${to}\nFrom: ${from}\nModel Unit: Lenovo Chromebook\n${total}\n\nSerial Numbers:\n${serials}\n\nReceived By: ___________________`
-      };
-
-      emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", templateParams)
-        .then(() => alert("Email sent successfully!"))
-        .catch(error => alert("Failed to send email: " + error));
+      setTimeout(() => {
+        html2pdf().set(opt).from(note).save().then(() => {
+          note.classList.remove('hide-buttons');
+        });
+      }, 100);
     }
   </script>
 </body>
