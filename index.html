@@ -7,7 +7,7 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-image: url('./bp.png'); /* ✅ Correct path for GitHub Pages */
+      background-image: url('./bp.png');
       background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
@@ -68,6 +68,11 @@
       button {
         display: none !important;
       }
+      #serials {
+        max-height: none !important;
+        overflow: visible !important;
+        page-break-inside: avoid;
+      }
     }
 
     #note.hide-buttons button {
@@ -75,7 +80,7 @@
     }
 
     @page {
-      size: A5;
+      size: A4;
       margin: 10mm;
     }
   </style>
@@ -99,6 +104,7 @@
     <label>Serial Number:</label>
     <input type="text" id="serialInput" placeholder="Enter serial number" />
     <button onclick="addSerial()">Add Serial</button>
+    <button onclick="clearSerials()">Clear Serials</button>
 
     <ul id="serials"></ul>
     <p id="totalCount">Total: 0</p>
@@ -115,6 +121,10 @@
     document.getElementById('noteNumber').textContent = 'DN-' + Date.now();
     document.getElementById('noteDate').textContent = new Date().toISOString().split('T')[0];
 
+    document.getElementById('serialInput').addEventListener('keypress', e => {
+      if (e.key === 'Enter') addSerial();
+    });
+
     function addSerial(value = null) {
       const input = document.getElementById('serialInput');
       const sn = value || input.value.trim();
@@ -127,6 +137,11 @@
         input.value = '';
         updateTotal();
       }
+    }
+
+    function clearSerials() {
+      document.getElementById('serials').innerHTML = '';
+      updateTotal();
     }
 
     function updateTotal() {
@@ -143,7 +158,8 @@
         margin: 10,
         filename: 'delivery_note.pdf',
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        jsPDF: { unit: 'mm', format: 'a5', orientation: 'portrait' }
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        html2canvas: { scale: 2 }
       };
 
       setTimeout(() => {
