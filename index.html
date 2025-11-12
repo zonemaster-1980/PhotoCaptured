@@ -78,16 +78,18 @@
       margin-top: 5px;
     }
 
-  .print-hide {
-  display: block;
-}
+    .print-hide {
+      display: block;
+    }
 
-@media print {
-  .print-hide {
-    display: none !important;
-  }
-}
+    @media print {
+      button {
+        display: none !important;
+      }
 
+      .print-hide {
+        display: none !important;
+      }
 
       #serials {
         max-height: none !important;
@@ -126,10 +128,12 @@
     <p><strong>Model Unit:</strong> Lenovo Chromebook</p>
     <hr/>
 
-    <label>Serial Number:</label>
-    <input type="text" id="serialInput" placeholder="Enter serial number" />
-    <button onclick="addSerial()">Add Serial</button>
-    <button onclick="clearSerials()">Clear Serials</button>
+    <div class="print-hide">
+      <label>Serial Number:</label>
+      <input type="text" id="serialInput" placeholder="Enter serial number" />
+      <button onclick="addSerial()">Add Serial</button>
+      <button onclick="clearSerials()">Clear Serials</button>
+    </div>
 
     <ul id="serials"></ul>
     <p id="totalCount">Total: 0</p>
@@ -141,13 +145,6 @@
     <button onclick="exportPDF()">Export as PDF</button>
     <button onclick="window.print()">Print</button>
   </div>
-
-  <div class="print-hide">
-  <label>Serial Number:</label>
-  <input type="text" id="serialInput" placeholder="Enter serial number" />
-  <button onclick="addSerial()">Add Serial</button>
-  <button onclick="clearSerials()">Clear Serials</button>
-</div>
 
   <script>
     document.getElementById('noteNumber').textContent = 'DN-' + Date.now();
@@ -212,4 +209,3 @@
   </script>
 </body>
 </html>
-
