@@ -68,26 +68,28 @@
       font-weight: bold;
     }
 
+    #serials.three-column {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
     #totalCount {
       font-weight: bold;
       color: red;
       margin-top: 5px;
     }
 
-    @media screen and (min-width: 520px) {
-      #serials.three-column {
-        grid-template-columns: repeat(3, 1fr);
-      }
-    }
-
     @media print {
       button {
         display: none !important;
       }
+
       #serials {
         max-height: none !important;
         overflow: visible !important;
         page-break-inside: avoid;
+      }
+
+      #serials.three-column {
         grid-template-columns: repeat(3, 1fr) !important;
       }
     }
@@ -155,7 +157,6 @@
         input.value = '';
         updateTotal();
 
-        // Apply 3-column layout if more than 10
         if (serialsList.children.length > 10) {
           serialsList.classList.add('three-column');
         } else {
