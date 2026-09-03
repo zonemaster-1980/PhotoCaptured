@@ -1,0 +1,2046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width,
+               initial-scale=1,
+               maximum-scale=1,
+               user-scalable=no,
+               viewport-fit=cover">
+
+<meta name="theme-color" content="#080b0d">
+
+<title>DJIS ID Photo Booth</title>
+
+<style>
+*{
+  box-sizing:border-box;
+  -webkit-tap-highlight-color:transparent;
+}
+
+html,
+body{
+  margin:0;
+  padding:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#080b0d;
+  color:#fff;
+  font-family:Arial,Helvetica,sans-serif;
+}
+
+body{
+  min-height:100dvh;
+}
+
+/* =========================================================
+   COMMON
+========================================================= */
+
+.screen{
+  display:none;
+  width:100%;
+  height:100dvh;
+}
+
+.screen.active{
+  display:flex;
+}
+
+/* =========================================================
+   ID SCREEN
+========================================================= */
+
+#idScreen{
+  align-items:center;
+  justify-content:center;
+  padding:25px;
+}
+
+.idBox{
+  width:min(420px,100%);
+  text-align:center;
+}
+
+.logo{
+  font-size:30px;
+  font-weight:800;
+  letter-spacing:2px;
+  margin-bottom:8px;
+}
+
+.subtitle{
+  color:#9da8ad;
+  font-size:14px;
+  margin-bottom:35px;
+}
+
+.idInput{
+  width:100%;
+  height:58px;
+  border:1px solid #283137;
+  border-radius:14px;
+  background:#11171b;
+  color:#fff;
+  text-align:center;
+  font-size:22px;
+  outline:none;
+  padding:0 15px;
+}
+
+.idInput:focus{
+  border-color:#35d7ff;
+  box-shadow:0 0 0 3px rgba(53,215,255,.12);
+}
+
+.startBtn{
+  width:100%;
+  height:58px;
+  margin-top:18px;
+  border:0;
+  border-radius:14px;
+  background:#35d7ff;
+  color:#001014;
+  font-size:17px;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.startBtn:active{
+  transform:scale(.98);
+}
+
+.info{
+  margin-top:18px;
+  font-size:12px;
+  color:#78858b;
+  line-height:1.5;
+}
+
+/* =========================================================
+   CAMERA SCREEN
+========================================================= */
+
+#cameraScreen{
+  position:relative;
+  background:#000;
+  align-items:center;
+  justify-content:center;
+}
+
+#video{
+  position:absolute;
+  inset:0;
+
+  width:100%;
+  height:100%;
+
+  object-fit:cover;
+
+  background:#000;
+}
+
+/*
+  Camera preview is NOT mirrored by default.
+  This gives a more natural ID-photo result.
+*/
+#video.mirror{
+  transform:scaleX(-1);
+}
+
+/* =========================================================
+   CAMERA TOP BAR
+========================================================= */
+
+.cameraTop{
+  position:absolute;
+  z-index:10;
+
+  top:0;
+  left:0;
+  right:0;
+
+  padding:
+    max(15px, env(safe-area-inset-top))
+    15px
+    15px;
+
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(0,0,0,.75),
+      rgba(0,0,0,0)
+    );
+}
+
+.cameraTitle{
+  font-size:15px;
+  font-weight:700;
+}
+
+.cameraStatus{
+  margin-top:3px;
+  font-size:11px;
+  color:#9ea9ad;
+}
+
+.switchBtn{
+  border:1px solid rgba(255,255,255,.3);
+  background:rgba(0,0,0,.55);
+  color:#fff;
+
+  height:42px;
+  padding:0 15px;
+
+  border-radius:22px;
+
+  font-weight:700;
+  cursor:pointer;
+
+  backdrop-filter:blur(8px);
+}
+
+/* =========================================================
+   PHOTO GUIDE
+========================================================= */
+
+.photoGuide{
+  position:absolute;
+  z-index:5;
+
+  /*
+    Exact 7:9 ratio
+  */
+
+  width:min(70vw,350px);
+  aspect-ratio:7 / 9;
+
+  border:3px solid rgba(255,255,255,.95);
+
+  border-radius:4px;
+
+  pointer-events:none;
+
+  box-shadow:
+    0 0 0 9999px rgba(0,0,0,.25),
+    0 0 20px rgba(0,0,0,.4);
+}
+
+.guideLabel{
+  position:absolute;
+  z-index:6;
+
+  top:calc(50% + min(35vw,175px) + 12px);
+
+  transform:translateY(-50%);
+
+  font-size:12px;
+  color:rgba(255,255,255,.8);
+
+  background:rgba(0,0,0,.55);
+
+  padding:6px 10px;
+
+  border-radius:12px;
+}
+
+/* =========================================================
+   CAMERA BOTTOM
+========================================================= */
+
+.cameraBottom{
+  position:absolute;
+  z-index:10;
+
+  left:0;
+  right:0;
+  bottom:0;
+
+  padding:
+    15px
+    15px
+    max(20px, env(safe-area-inset-bottom));
+
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:12px;
+
+  background:
+    linear-gradient(
+      to top,
+      rgba(0,0,0,.82),
+      rgba(0,0,0,0)
+    );
+}
+
+.cameraSelect{
+  width:min(450px,95%);
+
+  height:40px;
+
+  border:1px solid rgba(255,255,255,.2);
+
+  border-radius:20px;
+
+  background:rgba(0,0,0,.65);
+
+  color:#fff;
+
+  padding:0 12px;
+
+  outline:none;
+
+  display:none;
+}
+
+.captureBtn{
+  width:76px;
+  height:76px;
+
+  border-radius:50%;
+
+  border:6px solid rgba(255,255,255,.85);
+
+  background:#fff;
+
+  cursor:pointer;
+
+  box-shadow:
+    0 3px 20px rgba(0,0,0,.5);
+}
+
+.captureBtn:active{
+  transform:scale(.92);
+}
+
+.captureBtn:disabled{
+  opacity:.35;
+}
+
+/* =========================================================
+   ERROR PANEL
+========================================================= */
+
+.errorPanel{
+  position:absolute;
+  z-index:20;
+
+  left:20px;
+  right:20px;
+  top:50%;
+
+  transform:translateY(-50%);
+
+  background:#10171b;
+
+  border:1px solid #29353b;
+
+  border-radius:18px;
+
+  padding:25px;
+
+  text-align:center;
+
+  display:none;
+}
+
+.errorPanel.show{
+  display:block;
+}
+
+.errorTitle{
+  color:#ff7474;
+  font-size:18px;
+  font-weight:800;
+  margin-bottom:10px;
+}
+
+.errorText{
+  color:#b7c1c5;
+  font-size:13px;
+  line-height:1.5;
+  white-space:pre-line;
+}
+
+.retryBtn{
+  margin-top:18px;
+
+  height:46px;
+  padding:0 20px;
+
+  border:0;
+  border-radius:12px;
+
+  background:#35d7ff;
+  color:#001014;
+
+  font-weight:800;
+}
+
+/* =========================================================
+   PREVIEW SCREEN
+========================================================= */
+
+#previewScreen{
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+
+  padding:
+    20px
+    20px
+    max(20px,env(safe-area-inset-bottom));
+}
+
+.previewTitle{
+  font-size:20px;
+  font-weight:800;
+  margin-bottom:15px;
+}
+
+.previewCard{
+  width:min(350px,78vw);
+  aspect-ratio:7 / 9;
+
+  background:#fff;
+
+  border-radius:5px;
+
+  overflow:hidden;
+
+  box-shadow:
+    0 10px 40px rgba(0,0,0,.55);
+}
+
+#previewImage{
+  width:100%;
+  height:100%;
+
+  object-fit:cover;
+
+  display:block;
+}
+
+.previewButtons{
+  width:min(420px,100%);
+
+  display:flex;
+  gap:12px;
+
+  margin-top:20px;
+}
+
+.downloadBtn,
+.retakeBtn{
+  flex:1;
+
+  height:54px;
+
+  border:0;
+  border-radius:13px;
+
+  font-size:15px;
+  font-weight:800;
+
+  cursor:pointer;
+}
+
+.downloadBtn{
+  background:#35d7ff;
+  color:#001014;
+}
+
+.retakeBtn{
+  background:#20292e;
+  color:#fff;
+}
+
+/* =========================================================
+   LOADING
+========================================================= */
+
+.loading{
+  position:absolute;
+  z-index:30;
+
+  inset:0;
+
+  background:rgba(0,0,0,.7);
+
+  display:none;
+
+  align-items:center;
+  justify-content:center;
+
+  flex-direction:column;
+}
+
+.loading.show{
+  display:flex;
+}
+
+.spinner{
+  width:45px;
+  height:45px;
+
+  border:4px solid rgba(255,255,255,.2);
+
+  border-top-color:#35d7ff;
+
+  border-radius:50%;
+
+  animation:spin .8s linear infinite;
+}
+
+.loadingText{
+  margin-top:14px;
+
+  font-size:13px;
+
+  color:#d0d8db;
+}
+
+@keyframes spin{
+  to{
+    transform:rotate(360deg);
+  }
+}
+
+/* =========================================================
+   MOBILE LANDSCAPE
+========================================================= */
+
+@media(max-height:520px){
+
+  .photoGuide{
+    height:72vh;
+    width:auto;
+  }
+
+  .cameraBottom{
+    padding-top:5px;
+  }
+
+  .captureBtn{
+    width:62px;
+    height:62px;
+  }
+
+}
+
+/* =========================================================
+   VERY SMALL PHONES
+========================================================= */
+
+@media(max-width:360px){
+
+  .photoGuide{
+    width:72vw;
+  }
+
+  .captureBtn{
+    width:68px;
+    height:68px;
+  }
+
+}
+</style>
+</head>
+
+<body>
+
+<!-- =========================================================
+     SCREEN 1
+========================================================= -->
+
+<section id="idScreen" class="screen active">
+
+  <div class="idBox">
+
+    <div class="logo">
+      DJIS
+    </div>
+
+    <div class="subtitle">
+      ID PHOTO BOOTH
+    </div>
+
+    <input
+      id="studentId"
+      class="idInput"
+      type="text"
+      inputmode="numeric"
+      autocomplete="off"
+      placeholder="Enter Student ID"
+      maxlength="30"
+    >
+
+    <button
+      id="startBtn"
+      class="startBtn"
+      type="button">
+      START CAPTURE
+    </button>
+
+    <div class="info">
+      Enter the ID number first.<br>
+      The ID will be used only for the downloaded filename.
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SCREEN 2
+========================================================= -->
+
+<section id="cameraScreen" class="screen">
+
+  <video
+    id="video"
+    autoplay
+    playsinline
+    muted>
+  </video>
+
+  <div class="cameraTop">
+
+    <div>
+      <div class="cameraTitle">
+        ID PHOTO
+      </div>
+
+      <div
+        id="cameraStatus"
+        class="cameraStatus">
+        Starting camera...
+      </div>
+    </div>
+
+    <button
+      id="switchBtn"
+      class="switchBtn"
+      type="button">
+      ↻ Switch
+    </button>
+
+  </div>
+
+
+  <div class="photoGuide"></div>
+
+  <div class="guideLabel">
+    7 : 9 PHOTO
+  </div>
+
+
+  <div class="cameraBottom">
+
+    <select
+      id="cameraSelect"
+      class="cameraSelect">
+    </select>
+
+    <button
+      id="captureBtn"
+      class="captureBtn"
+      type="button"
+      aria-label="Take photo">
+    </button>
+
+  </div>
+
+
+  <div
+    id="errorPanel"
+    class="errorPanel">
+
+    <div class="errorTitle">
+      CAMERA ERROR
+    </div>
+
+    <div
+      id="errorText"
+      class="errorText">
+    </div>
+
+    <button
+      id="retryBtn"
+      class="retryBtn"
+      type="button">
+      TRY AGAIN
+    </button>
+
+  </div>
+
+
+  <div
+    id="loading"
+    class="loading">
+
+    <div class="spinner"></div>
+
+    <div class="loadingText">
+      Starting camera...
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- =========================================================
+     SCREEN 3
+========================================================= -->
+
+<section id="previewScreen" class="screen">
+
+  <div class="previewTitle">
+    PHOTO PREVIEW
+  </div>
+
+  <div class="previewCard">
+
+    <img
+      id="previewImage"
+      alt="Captured ID photo">
+
+  </div>
+
+  <div class="previewButtons">
+
+    <button
+      id="retakeBtn"
+      class="retakeBtn"
+      type="button">
+      RETAKE
+    </button>
+
+    <button
+      id="downloadBtn"
+      class="downloadBtn"
+      type="button">
+      DOWNLOAD
+    </button>
+
+  </div>
+
+</section>
+
+
+<script>
+
+/* =========================================================
+   CONFIGURATION
+========================================================= */
+
+const OUTPUT_WIDTH  = 350;
+const OUTPUT_HEIGHT = 450;
+
+
+/* =========================================================
+   ELEMENTS
+========================================================= */
+
+const idScreen       = document.getElementById("idScreen");
+const cameraScreen   = document.getElementById("cameraScreen");
+const previewScreen  = document.getElementById("previewScreen");
+
+const studentId      = document.getElementById("studentId");
+
+const startBtn       = document.getElementById("startBtn");
+const switchBtn      = document.getElementById("switchBtn");
+const captureBtn     = document.getElementById("captureBtn");
+
+const retakeBtn      = document.getElementById("retakeBtn");
+const downloadBtn    = document.getElementById("downloadBtn");
+
+const video          = document.getElementById("video");
+
+const cameraStatus   = document.getElementById("cameraStatus");
+const cameraSelect   = document.getElementById("cameraSelect");
+
+const errorPanel     = document.getElementById("errorPanel");
+const errorText      = document.getElementById("errorText");
+const retryBtn       = document.getElementById("retryBtn");
+
+const previewImage   = document.getElementById("previewImage");
+
+const loading        = document.getElementById("loading");
+
+
+/* =========================================================
+   VARIABLES
+========================================================= */
+
+let stream = null;
+
+let cameras = [];
+
+let currentCameraIndex = 0;
+
+let currentFacing = "environment";
+
+let capturedBlob = null;
+
+let capturedURL = null;
+
+let studentIDValue = "";
+
+
+/* =========================================================
+   SCREEN CONTROL
+========================================================= */
+
+function showScreen(screen){
+
+  idScreen.classList.remove("active");
+  cameraScreen.classList.remove("active");
+  previewScreen.classList.remove("active");
+
+  screen.classList.add("active");
+
+}
+
+
+/* =========================================================
+   LOADING
+========================================================= */
+
+function setLoading(show,text){
+
+  if(show){
+
+    loading.classList.add("show");
+
+    loading.querySelector(".loadingText")
+      .textContent = text || "Please wait...";
+
+  }else{
+
+    loading.classList.remove("show");
+
+  }
+
+}
+
+
+/* =========================================================
+   ERROR
+========================================================= */
+
+function showError(message){
+
+  errorText.textContent = message;
+
+  errorPanel.classList.add("show");
+
+  cameraStatus.textContent = "Camera unavailable";
+
+}
+
+function hideError(){
+
+  errorPanel.classList.remove("show");
+
+}
+
+
+/* =========================================================
+   STOP CAMERA
+========================================================= */
+
+function stopCamera(){
+
+  if(stream){
+
+    stream.getTracks().forEach(track => {
+
+      try{
+        track.stop();
+      }catch(e){}
+
+    });
+
+    stream = null;
+
+  }
+
+  video.srcObject = null;
+
+}
+
+
+/* =========================================================
+   CHECK CAMERA SUPPORT
+========================================================= */
+
+function checkCameraSupport(){
+
+  if(!window.isSecureContext){
+
+    showError(
+      "Camera access requires a secure HTTPS connection.\n\n" +
+      "Open this Apps Script web app using its HTTPS URL."
+    );
+
+    return false;
+
+  }
+
+  if(!navigator.mediaDevices){
+
+    showError(
+      "This browser does not provide camera access.\n\n" +
+      "Please use Chrome, Brave, Edge, or another modern browser."
+    );
+
+    return false;
+
+  }
+
+  if(!navigator.mediaDevices.getUserMedia){
+
+    showError(
+      "Camera access is not supported by this browser."
+    );
+
+    return false;
+
+  }
+
+  return true;
+
+}
+
+
+/* =========================================================
+   GET CAMERA DEVICES
+========================================================= */
+
+async function getCameras(){
+
+  try{
+
+    const devices =
+      await navigator.mediaDevices.enumerateDevices();
+
+    cameras = devices.filter(
+      device => device.kind === "videoinput"
+    );
+
+    cameraSelect.innerHTML = "";
+
+    cameras.forEach((camera,index)=>{
+
+      const option =
+        document.createElement("option");
+
+      option.value = camera.deviceId;
+
+      option.textContent =
+        camera.label ||
+        `Camera ${index + 1}`;
+
+      cameraSelect.appendChild(option);
+
+    });
+
+    /*
+      Only show dropdown if more than one camera
+    */
+
+    cameraSelect.style.display =
+      cameras.length > 1
+      ? "block"
+      : "none";
+
+    return cameras;
+
+  }catch(error){
+
+    console.error(
+      "enumerateDevices error:",
+      error
+    );
+
+    return [];
+
+  }
+
+}
+
+
+/* =========================================================
+   FIND CAMERA BY FACING MODE
+========================================================= */
+
+function findCameraByFacing(facing){
+
+  const text =
+    cameras.map(camera =>
+      (camera.label || "").toLowerCase()
+    );
+
+  if(facing === "environment"){
+
+    /*
+      Rear / world-facing cameras often contain:
+      back, rear, environment, world
+    */
+
+    const index = text.findIndex(label =>
+      label.includes("back") ||
+      label.includes("rear") ||
+      label.includes("environment") ||
+      label.includes("world")
+    );
+
+    if(index >= 0){
+      return cameras[index];
+    }
+
+  }
+
+  if(facing === "user"){
+
+    /*
+      Front cameras often contain:
+      front, user, integrated, internal
+    */
+
+    const index = text.findIndex(label =>
+      label.includes("front") ||
+      label.includes("user") ||
+      label.includes("integrated") ||
+      label.includes("internal")
+    );
+
+    if(index >= 0){
+      return cameras[index];
+    }
+
+  }
+
+  return null;
+
+}
+
+
+/* =========================================================
+   OPEN CAMERA
+========================================================= */
+
+async function openCamera(){
+
+  if(!checkCameraSupport()){
+    return false;
+  }
+
+  hideError();
+
+  setLoading(true,"Requesting camera permission...");
+
+  stopCamera();
+
+  try{
+
+    /*
+      IMPORTANT:
+
+      First request is intentionally simple.
+
+      This is important on Android because camera labels
+      and device IDs can be hidden until permission is granted.
+    */
+
+    let initialConstraints = {
+
+      video:{
+        width:{
+          ideal:1280
+        },
+
+        height:{
+          ideal:720
+        },
+
+        facingMode:{
+          ideal:currentFacing
+        }
+      },
+
+      audio:false
+
+    };
+
+
+    stream =
+      await navigator.mediaDevices.getUserMedia(
+        initialConstraints
+      );
+
+
+    /*
+      Attach stream
+    */
+
+    video.srcObject = stream;
+
+    await video.play();
+
+
+    /*
+      NOW that permission is granted,
+      enumerate cameras.
+    */
+
+    await getCameras();
+
+
+    /*
+      Find actual active device.
+    */
+
+    const track =
+      stream.getVideoTracks()[0];
+
+    const settings =
+      track.getSettings();
+
+
+    console.log(
+      "Active camera:",
+      settings
+    );
+
+
+    /*
+      Update current facing mode if browser reports it.
+    */
+
+    if(settings.facingMode){
+
+      currentFacing =
+        settings.facingMode;
+
+      updateMirror();
+
+    }
+
+
+    cameraStatus.textContent =
+      "Camera ready";
+
+
+    setLoading(false);
+
+    return true;
+
+  }catch(error){
+
+    console.error(
+      "Camera start error:",
+      error
+    );
+
+    setLoading(false);
+
+    stopCamera();
+
+    handleCameraError(error);
+
+    return false;
+
+  }
+
+}
+
+
+/* =========================================================
+   OPEN SPECIFIC CAMERA
+========================================================= */
+
+async function openSpecificCamera(deviceId){
+
+  if(!checkCameraSupport()){
+    return false;
+  }
+
+  hideError();
+
+  setLoading(true,"Switching camera...");
+
+  stopCamera();
+
+  try{
+
+    /*
+      Try exact device first.
+    */
+
+    try{
+
+      stream =
+        await navigator.mediaDevices.getUserMedia({
+
+          video:{
+            deviceId:{
+              exact:deviceId
+            },
+
+            width:{
+              ideal:1280
+            },
+
+            height:{
+              ideal:720
+            }
+          },
+
+          audio:false
+
+        });
+
+    }catch(firstError){
+
+      console.warn(
+        "Exact device failed. Trying fallback.",
+        firstError
+      );
+
+
+      /*
+        Android/Brave fallback
+      */
+
+      stream =
+        await navigator.mediaDevices.getUserMedia({
+
+          video:{
+            facingMode:{
+              ideal:currentFacing
+            },
+
+            width:{
+              ideal:1280
+            },
+
+            height:{
+              ideal:720
+            }
+          },
+
+          audio:false
+
+        });
+
+    }
+
+
+    video.srcObject = stream;
+
+    await video.play();
+
+
+    const track =
+      stream.getVideoTracks()[0];
+
+    const settings =
+      track.getSettings();
+
+
+    console.log(
+      "Selected camera settings:",
+      settings
+    );
+
+
+    if(settings.facingMode){
+
+      currentFacing =
+        settings.facingMode;
+
+    }
+
+
+    updateMirror();
+
+    cameraStatus.textContent =
+      "Camera ready";
+
+    setLoading(false);
+
+    return true;
+
+  }catch(error){
+
+    console.error(
+      "Specific camera error:",
+      error
+    );
+
+    setLoading(false);
+
+    stopCamera();
+
+    handleCameraError(error);
+
+    return false;
+
+  }
+
+}
+
+
+/* =========================================================
+   SWITCH CAMERA
+========================================================= */
+
+async function switchCamera(){
+
+  hideError();
+
+  /*
+    First try device list if available.
+  */
+
+  if(cameras.length > 1){
+
+    currentCameraIndex =
+      (currentCameraIndex + 1)
+      % cameras.length;
+
+    const camera =
+      cameras[currentCameraIndex];
+
+    cameraSelect.value =
+      camera.deviceId;
+
+    await openSpecificCamera(
+      camera.deviceId
+    );
+
+    return;
+
+  }
+
+
+  /*
+    If browser exposes only one device,
+    use facingMode.
+
+    This is especially useful on Android.
+  */
+
+  currentFacing =
+    currentFacing === "environment"
+    ? "user"
+    : "environment";
+
+  await openCamera();
+
+}
+
+
+/* =========================================================
+   MIRROR
+========================================================= */
+
+function updateMirror(){
+
+  /*
+    For ID photos we normally want the final image
+    unmirrored.
+
+    Preview is also unmirrored.
+  */
+
+  video.classList.remove("mirror");
+
+}
+
+
+/* =========================================================
+   CAMERA ERROR HANDLING
+========================================================= */
+
+function handleCameraError(error){
+
+  let message =
+    "Unable to start the camera.";
+
+  switch(error.name){
+
+    case "NotAllowedError":
+
+      message =
+        "Camera permission was denied.\n\n" +
+        "On Android/Brave:\n" +
+        "1. Tap the lock/settings icon beside the address.\n" +
+        "2. Open Permissions.\n" +
+        "3. Allow Camera.\n" +
+        "4. Reload the page.\n\n" +
+        "Also make sure another application is not using the camera.";
+
+      break;
+
+
+    case "NotFoundError":
+
+      message =
+        "No camera was found.\n\n" +
+        "Check that the device has a working camera.";
+
+      break;
+
+
+    case "NotReadableError":
+
+      message =
+        "The camera exists, but the browser could not read it.\n\n" +
+        "Another application may already be using the camera.\n\n" +
+        "Close other camera applications and try again.";
+
+      break;
+
+
+    case "OverconstrainedError":
+
+      message =
+        "The selected camera does not support the requested settings.\n\n" +
+        "The app will retry using simpler camera settings.";
+
+      break;
+
+
+    case "SecurityError":
+
+      message =
+        "The browser blocked camera access for security reasons.\n\n" +
+        "Make sure this page is running over HTTPS.";
+
+      break;
+
+
+    case "AbortError":
+
+      message =
+        "Camera startup was interrupted.\n\n" +
+        "Please try again.";
+
+      break;
+
+
+    default:
+
+      message =
+        "Camera error:\n" +
+        error.name +
+        "\n\n" +
+        (error.message || "Unknown error.");
+
+  }
+
+  showError(message);
+
+}
+
+
+/* =========================================================
+   CAPTURE PHOTO
+========================================================= */
+
+async function capturePhoto(){
+
+  if(!stream){
+
+    showError(
+      "Camera is not ready."
+    );
+
+    return;
+
+  }
+
+  if(!video.videoWidth || !video.videoHeight){
+
+    showError(
+      "Camera image is not ready yet.\n\n" +
+      "Please wait a moment and try again."
+    );
+
+    return;
+
+  }
+
+
+  captureBtn.disabled = true;
+
+  cameraStatus.textContent =
+    "Capturing...";
+
+
+  try{
+
+    const canvas =
+      document.createElement("canvas");
+
+    canvas.width =
+      OUTPUT_WIDTH;
+
+    canvas.height =
+      OUTPUT_HEIGHT;
+
+
+    const ctx =
+      canvas.getContext("2d");
+
+
+    /*
+      Source dimensions
+    */
+
+    const sourceWidth =
+      video.videoWidth;
+
+    const sourceHeight =
+      video.videoHeight;
+
+
+    /*
+      Target ratio = 7:9
+    */
+
+    const targetRatio =
+      OUTPUT_WIDTH / OUTPUT_HEIGHT;
+
+    const sourceRatio =
+      sourceWidth / sourceHeight;
+
+
+    let sx = 0;
+    let sy = 0;
+    let sw = sourceWidth;
+    let sh = sourceHeight;
+
+
+    /*
+      Center crop
+    */
+
+    if(sourceRatio > targetRatio){
+
+      /*
+        Source is too wide.
+      */
+
+      sw =
+        sourceHeight * targetRatio;
+
+      sx =
+        (sourceWidth - sw) / 2;
+
+    }else{
+
+      /*
+        Source is too tall.
+      */
+
+      sh =
+        sourceWidth / targetRatio;
+
+      sy =
+        (sourceHeight - sh) / 2;
+
+    }
+
+
+    /*
+      Draw exact 350 x 450.
+    */
+
+    ctx.drawImage(
+      video,
+      sx,
+      sy,
+      sw,
+      sh,
+      0,
+      0,
+      OUTPUT_WIDTH,
+      OUTPUT_HEIGHT
+    );
+
+
+    /*
+      Convert to PNG.
+    */
+
+    capturedBlob =
+      await new Promise(resolve => {
+
+        canvas.toBlob(
+          resolve,
+          "image/png"
+        );
+
+      });
+
+
+    if(!capturedBlob){
+
+      throw new Error(
+        "Could not create PNG."
+      );
+
+    }
+
+
+    /*
+      Preview URL
+    */
+
+    if(capturedURL){
+
+      URL.revokeObjectURL(
+        capturedURL
+      );
+
+    }
+
+    capturedURL =
+      URL.createObjectURL(
+        capturedBlob
+      );
+
+
+    previewImage.src =
+      capturedURL;
+
+
+    /*
+      Stop camera before preview.
+    */
+
+    stopCamera();
+
+
+    showScreen(
+      previewScreen
+    );
+
+  }catch(error){
+
+    console.error(
+      "Capture error:",
+      error
+    );
+
+    showError(
+      "Unable to capture the photo.\n\n" +
+      error.message
+    );
+
+  }finally{
+
+    captureBtn.disabled = false;
+
+  }
+
+}
+
+
+/* =========================================================
+   DOWNLOAD
+========================================================= */
+
+function downloadPhoto(){
+
+  if(!capturedBlob){
+
+    alert(
+      "There is no captured photo."
+    );
+
+    return;
+
+  }
+
+
+  if(!studentIDValue){
+
+    alert(
+      "Student ID is missing."
+    );
+
+    return;
+
+  }
+
+
+  /*
+    Clean filename.
+  */
+
+  const safeID =
+    studentIDValue
+      .trim()
+      .replace(
+        /[^a-zA-Z0-9_-]/g,
+        ""
+      );
+
+
+  if(!safeID){
+
+    alert(
+      "Invalid Student ID."
+    );
+
+    return;
+
+  }
+
+
+  const filename =
+    safeID + ".png";
+
+
+  const url =
+    URL.createObjectURL(
+      capturedBlob
+    );
+
+
+  const link =
+    document.createElement("a");
+
+  link.href = url;
+
+  link.download = filename;
+
+  link.style.display = "none";
+
+  document.body.appendChild(link);
+
+  link.click();
+
+  document.body.removeChild(link);
+
+
+  setTimeout(()=>{
+
+    URL.revokeObjectURL(url);
+
+  },1000);
+
+
+  /*
+    Return to ID screen.
+  */
+
+  setTimeout(()=>{
+
+    resetEverything();
+
+    showScreen(
+      idScreen
+    );
+
+    studentId.focus();
+
+  },500);
+
+}
+
+
+/* =========================================================
+   RETAKE
+========================================================= */
+
+async function retakePhoto(){
+
+  capturedBlob = null;
+
+  if(capturedURL){
+
+    URL.revokeObjectURL(
+      capturedURL
+    );
+
+    capturedURL = null;
+
+  }
+
+  previewImage.removeAttribute("src");
+
+  showScreen(
+    cameraScreen
+  );
+
+  await openCamera();
+
+}
+
+
+/* =========================================================
+   RESET
+========================================================= */
+
+function resetEverything(){
+
+  stopCamera();
+
+  hideError();
+
+  capturedBlob = null;
+
+  if(capturedURL){
+
+    URL.revokeObjectURL(
+      capturedURL
+    );
+
+    capturedURL = null;
+
+  }
+
+  previewImage.removeAttribute("src");
+
+  studentIDValue = "";
+
+  studentId.value = "";
+
+  cameras = [];
+
+  currentCameraIndex = 0;
+
+  currentFacing = "environment";
+
+}
+
+
+/* =========================================================
+   START BUTTON
+========================================================= */
+
+startBtn.addEventListener(
+  "click",
+  async ()=>{
+
+    const id =
+      studentId.value.trim();
+
+
+    if(!id){
+
+      alert(
+        "Please enter the Student ID."
+      );
+
+      studentId.focus();
+
+      return;
+
+    }
+
+
+    studentIDValue =
+      id;
+
+
+    /*
+      Show camera screen FIRST.
+
+      This keeps getUserMedia in direct user interaction
+      flow on mobile browsers.
+    */
+
+    showScreen(
+      cameraScreen
+    );
+
+
+    await openCamera();
+
+  }
+);
+
+
+/* =========================================================
+   ENTER KEY
+========================================================= */
+
+studentId.addEventListener(
+  "keydown",
+  event => {
+
+    if(event.key === "Enter"){
+
+      event.preventDefault();
+
+      startBtn.click();
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   SWITCH
+========================================================= */
+
+switchBtn.addEventListener(
+  "click",
+  async ()=>{
+
+    await switchCamera();
+
+  }
+);
+
+
+/* =========================================================
+   CAMERA DROPDOWN
+========================================================= */
+
+cameraSelect.addEventListener(
+  "change",
+  async ()=>{
+
+    const deviceId =
+      cameraSelect.value;
+
+    if(!deviceId){
+      return;
+    }
+
+    await openSpecificCamera(
+      deviceId
+    );
+
+  }
+);
+
+
+/* =========================================================
+   CAPTURE
+========================================================= */
+
+captureBtn.addEventListener(
+  "click",
+  capturePhoto
+);
+
+
+/* =========================================================
+   RETAKE
+========================================================= */
+
+retakeBtn.addEventListener(
+  "click",
+  retakePhoto
+);
+
+
+/* =========================================================
+   DOWNLOAD
+========================================================= */
+
+downloadBtn.addEventListener(
+  "click",
+  downloadPhoto
+);
+
+
+/* =========================================================
+   RETRY
+========================================================= */
+
+retryBtn.addEventListener(
+  "click",
+  async ()=>{
+
+    hideError();
+
+    await openCamera();
+
+  }
+);
+
+
+/* =========================================================
+   PAGE VISIBILITY
+========================================================= */
+
+document.addEventListener(
+  "visibilitychange",
+  ()=>{
+
+    /*
+      If user leaves the page, stop camera.
+      When returning, the user can press retry.
+    */
+
+    if(document.hidden){
+
+      stopCamera();
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   DEVICE CHANGE
+========================================================= */
+
+if(navigator.mediaDevices){
+
+  navigator.mediaDevices.addEventListener(
+    "devicechange",
+    async ()=>{
+
+      if(stream){
+
+        await getCameras();
+
+      }
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   INITIAL STATE
+========================================================= */
+
+window.addEventListener(
+  "load",
+  ()=>{
+
+    studentId.focus();
+
+  }
+);
+
+</script>
+
+</body>
+</html>
+
