@@ -1,2459 +1,565 @@
-<!DOCTYPE html>
+Replace your previous **background-removal JavaScript** with this version. Also change the MediaPipe model to **modelSelection: 0**.
 
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-
-<meta name="viewport"
-   content="width=device-width,
-            initial-scale=1,
-            maximum-scale=1,
-            user-scalable=no,
-            viewport-fit=cover">
-
-<meta name="theme-color" content="#080b0d">
-
-<title>DJIS ID Photo Booth</title>
-
-<style>
-*{
-  box-sizing:border-box;
-  -webkit-tap-highlight-color:transparent;
-}
-
-html,
-body{
-  margin:0;
-  padding:0;
-  width:100%;
-  height:100%;
-  overflow:hidden;
-  background:#080b0d;
-  color:#fff;
-  font-family:Arial,Helvetica,sans-serif;
-}
-
-body{
-  min-height:100dvh;
-}
-
-/* =========================================================
-   COMMON
-========================================================= */
-
-.screen{
-  display:none;
-  width:100%;
-  height:100dvh;
-}
-
-.screen.active{
-  display:flex;
-}
-
-/* =========================================================
-   ID SCREEN
-========================================================= */
-
-#idScreen{
-  align-items:center;
-  justify-content:center;
-  padding:25px;
-}
-
-.idBox{
-  width:min(420px,100%);
-  text-align:center;
-}
-
-.logo{
-  font-size:30px;
-  font-weight:800;
-  letter-spacing:2px;
-  margin-bottom:8px;
-}
-
-.subtitle{
-  color:#9da8ad;
-  font-size:14px;
-  margin-bottom:35px;
-}
-
-.idInput{
-  width:100%;
-  height:58px;
-  border:1px solid #283137;
-  border-radius:14px;
-  background:#11171b;
-  color:#fff;
-  text-align:center;
-  font-size:22px;
-  outline:none;
-  padding:0 15px;
-}
-
-.idInput:focus{
-  border-color:#35d7ff;
-  box-shadow:0 0 0 3px rgba(53,215,255,.12);
-}
-
-.startBtn{
-  width:100%;
-  height:58px;
-  margin-top:18px;
-  border:0;
-  border-radius:14px;
-  background:#35d7ff;
-  color:#001014;
-  font-size:17px;
-  font-weight:800;
-  cursor:pointer;
-}
-
-.startBtn:active{
-  transform:scale(.98);
-}
-
-.info{
-  margin-top:18px;
-  font-size:12px;
-  color:#78858b;
-  line-height:1.5;
-}
-
-/* =========================================================
-   CAMERA SCREEN
-========================================================= */
-
-#cameraScreen{
-  position:relative;
-  background:#000;
-  align-items:center;
-  justify-content:center;
-}
-
-#video{
-  position:absolute;
-  inset:0;
-
-  width:100%;
-  height:100%;
-
-  object-fit:cover;
-
-  background:#000;
-}
-
-#video.mirror{
-  transform:scaleX(-1);
-}
-
-/* =========================================================
-   CAMERA TOP BAR
-========================================================= */
-
-.cameraTop{
-  position:absolute;
-  z-index:10;
-
-  top:0;
-  left:0;
-  right:0;
-
-  padding:
-    max(15px, env(safe-area-inset-top))
-    15px
-    15px;
-
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(0,0,0,.75),
-      rgba(0,0,0,0)
-    );
-}
-
-.cameraTitle{
-  font-size:15px;
-  font-weight:700;
-}
-
-.cameraStatus{
-  margin-top:3px;
-  font-size:11px;
-  color:#9ea9ad;
-}
-
-.switchBtn{
-  border:1px solid rgba(255,255,255,.3);
-  background:rgba(0,0,0,.55);
-  color:#fff;
-
-  height:42px;
-  padding:0 15px;
-
-  border-radius:22px;
-
-  font-weight:700;
-  cursor:pointer;
-
-  backdrop-filter:blur(8px);
-}
-
-/* =========================================================
-   WHITE BACKGROUND STATUS
-========================================================= */
-
-.backgroundStatus{
-  position:absolute;
-  z-index:8;
-
-  top:78px;
-  left:50%;
-
-  transform:translateX(-50%);
-
-  background:rgba(0,0,0,.58);
-  border:1px solid rgba(255,255,255,.15);
-
-  padding:7px 12px;
-
-  border-radius:20px;
-
-  font-size:11px;
-  color:#fff;
-
-  backdrop-filter:blur(8px);
-
-  white-space:nowrap;
-}
-
-/* =========================================================
-   PHOTO GUIDE
-========================================================= */
-
-.photoGuide{
-  position:absolute;
-  z-index:5;
-
-  width:min(70vw,350px);
-  aspect-ratio:7 / 9;
-
-  border:3px solid rgba(255,255,255,.95);
-
-  border-radius:4px;
-
-  pointer-events:none;
-
-  box-shadow:
-    0 0 0 9999px rgba(0,0,0,.25),
-    0 0 20px rgba(0,0,0,.4);
-}
-
-.guideLabel{
-  position:absolute;
-  z-index:6;
-
-  top:calc(50% + min(35vw,175px) + 12px);
-
-  transform:translateY(-50%);
-
-  font-size:12px;
-  color:rgba(255,255,255,.8);
-
-  background:rgba(0,0,0,.55);
-
-  padding:6px 10px;
-
-  border-radius:12px;
-}
-
-/* =========================================================
-   CAMERA BOTTOM
-========================================================= */
-
-.cameraBottom{
-  position:absolute;
-  z-index:10;
-
-  left:0;
-  right:0;
-  bottom:0;
-
-  padding:
-    15px
-    15px
-    max(20px, env(safe-area-inset-bottom));
-
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:12px;
-
-  background:
-    linear-gradient(
-      to top,
-      rgba(0,0,0,.82),
-      rgba(0,0,0,0)
-    );
-}
-
-.cameraSelect{
-  width:min(450px,95%);
-
-  height:40px;
-
-  border:1px solid rgba(255,255,255,.2);
-
-  border-radius:20px;
-
-  background:rgba(0,0,0,.65);
-
-  color:#fff;
-
-  padding:0 12px;
-
-  outline:none;
-
-  display:none;
-}
-
-.captureBtn{
-  width:76px;
-  height:76px;
-
-  border-radius:50%;
-
-  border:6px solid rgba(255,255,255,.85);
-
-  background:#fff;
-
-  cursor:pointer;
-
-  box-shadow:
-    0 3px 20px rgba(0,0,0,.5);
-}
-
-.captureBtn:active{
-  transform:scale(.92);
-}
-
-.captureBtn:disabled{
-  opacity:.35;
-}
-
-/* =========================================================
-   ERROR PANEL
-========================================================= */
-
-.errorPanel{
-  position:absolute;
-  z-index:20;
-
-  left:20px;
-  right:20px;
-  top:50%;
-
-  transform:translateY(-50%);
-
-  background:#10171b;
-
-  border:1px solid #29353b;
-
-  border-radius:18px;
-
-  padding:25px;
-
-  text-align:center;
-
-  display:none;
-}
-
-.errorPanel.show{
-  display:block;
-}
-
-.errorTitle{
-  color:#ff7474;
-  font-size:18px;
-  font-weight:800;
-  margin-bottom:10px;
-}
-
-.errorText{
-  color:#b7c1c5;
-  font-size:13px;
-  line-height:1.5;
-  white-space:pre-line;
-}
-
-.retryBtn{
-  margin-top:18px;
-
-  height:46px;
-  padding:0 20px;
-
-  border:0;
-  border-radius:12px;
-
-  background:#35d7ff;
-  color:#001014;
-
-  font-weight:800;
-}
-
-/* =========================================================
-   PREVIEW SCREEN
-========================================================= */
-
-#previewScreen{
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-
-  padding:
-    20px
-    20px
-    max(20px,env(safe-area-inset-bottom));
-}
-
-.previewTitle{
-  font-size:20px;
-  font-weight:800;
-  margin-bottom:8px;
-}
-
-.previewStatus{
-  font-size:12px;
-  color:#35d7ff;
-  margin-bottom:12px;
-}
-
-.previewCard{
-  width:min(350px,78vw);
-  aspect-ratio:7 / 9;
-
-  background:#fff;
-
-  border-radius:5px;
-
-  overflow:hidden;
-
-  box-shadow:
-    0 10px 40px rgba(0,0,0,.55);
-}
-
-#previewImage{
-  width:100%;
-  height:100%;
-
-  object-fit:cover;
-
-  display:block;
-}
-
-.previewButtons{
-  width:min(420px,100%);
-
-  display:flex;
-  gap:12px;
-
-  margin-top:20px;
-}
-
-.downloadBtn,
-.retakeBtn{
-  flex:1;
-
-  height:54px;
-
-  border:0;
-  border-radius:13px;
-
-  font-size:15px;
-  font-weight:800;
-
-  cursor:pointer;
-}
-
-.downloadBtn{
-  background:#35d7ff;
-  color:#001014;
-}
-
-.retakeBtn{
-  background:#20292e;
-  color:#fff;
-}
-
-/* =========================================================
-   LOADING
-========================================================= */
-
-.loading{
-  position:absolute;
-  z-index:30;
-
-  inset:0;
-
-  background:rgba(0,0,0,.72);
-
-  display:none;
-
-  align-items:center;
-  justify-content:center;
-
-  flex-direction:column;
-}
-
-.loading.show{
-  display:flex;
-}
-
-.spinner{
-  width:45px;
-  height:45px;
-
-  border:4px solid rgba(255,255,255,.2);
-
-  border-top-color:#35d7ff;
-
-  border-radius:50%;
-
-  animation:spin .8s linear infinite;
-}
-
-.loadingText{
-  margin-top:14px;
-
-  font-size:13px;
-
-  color:#d0d8db;
-
-  text-align:center;
-
-  padding:0 25px;
-}
-
-@keyframes spin{
-  to{
-    transform:rotate(360deg);
-  }
-}
-
-/* =========================================================
-   MOBILE LANDSCAPE
-========================================================= */
-
-@media(max-height:520px){
-
-  .photoGuide{
-    height:72vh;
-    width:auto;
-  }
-
-  .cameraBottom{
-    padding-top:5px;
-  }
-
-  .captureBtn{
-    width:62px;
-    height:62px;
-  }
-
-}
-
-/* =========================================================
-   VERY SMALL PHONES
-========================================================= */
-
-@media(max-width:360px){
-
-  .photoGuide{
-    width:72vw;
-  }
-
-  .captureBtn{
-    width:68px;
-    height:68px;
-  }
-
-}
-</style>
-
-</head>
-
-<body>
-
-<!-- =========================================================
-     SCREEN 1
-========================================================= -->
-
-<section id="idScreen" class="screen active">
-
-  <div class="idBox">
-
-```
-<div class="logo">
-  DJIS
-</div>
-
-<div class="subtitle">
-  ID PHOTO BOOTH
-</div>
-
-<input
-  id="studentId"
-  class="idInput"
-  type="text"
-  inputmode="numeric"
-  autocomplete="off"
-  placeholder="Enter Student ID"
-  maxlength="30"
->
-
-<button
-  id="startBtn"
-  class="startBtn"
-  type="button">
-  START CAPTURE
-</button>
-
-<div class="info">
-  Enter the ID number first.<br>
-  The ID will be used only for the downloaded filename.
-</div>
-```
-
-  </div>
-
-</section>
-
-<!-- =========================================================
-     SCREEN 2
-========================================================= -->
-
-<section id="cameraScreen" class="screen">
-
-<video
- id="video"
- autoplay
- playsinline
- muted> </video>
-
-  <div class="cameraTop">
-
-```
-<div>
-  <div class="cameraTitle">
-    ID PHOTO
-  </div>
-
-  <div
-    id="cameraStatus"
-    class="cameraStatus">
-    Starting camera...
-  </div>
-</div>
-
-<button
-  id="switchBtn"
-  class="switchBtn"
-  type="button">
-  ↻ Switch
-</button>
-```
-
-  </div>
-
-  <div class="backgroundStatus">
-    ✓ WHITE BACKGROUND
-  </div>
-
-  <div class="photoGuide"></div>
-
-  <div class="guideLabel">
-    7 : 9 PHOTO
-  </div>
-
-  <div class="cameraBottom">
-
-```
-<select
-  id="cameraSelect"
-  class="cameraSelect">
-</select>
-
-<button
-  id="captureBtn"
-  class="captureBtn"
-  type="button"
-  aria-label="Take photo">
-</button>
-```
-
-  </div>
-
-  <div
-    id="errorPanel"
-    class="errorPanel">
-
-```
-<div class="errorTitle">
-  CAMERA ERROR
-</div>
-
-<div
-  id="errorText"
-  class="errorText">
-</div>
-
-<button
-  id="retryBtn"
-  class="retryBtn"
-  type="button">
-  TRY AGAIN
-</button>
-```
-
-  </div>
-
-  <div
-    id="loading"
-    class="loading">
-
-```
-<div class="spinner"></div>
-
-<div
-  id="loadingText"
-  class="loadingText">
-  Starting camera...
-</div>
-```
-
-  </div>
-
-</section>
-
-<!-- =========================================================
-     SCREEN 3
-========================================================= -->
-
-<section id="previewScreen" class="screen">
-
-  <div class="previewTitle">
-    PHOTO PREVIEW
-  </div>
-
-  <div class="previewStatus">
-    ✓ WHITE BACKGROUND APPLIED
-  </div>
-
-  <div class="previewCard">
-
-```
-<img
-  id="previewImage"
-  alt="Captured ID photo">
-```
-
-  </div>
-
-  <div class="previewButtons">
-
-```
-<button
-  id="retakeBtn"
-  class="retakeBtn"
-  type="button">
-  RETAKE
-</button>
-
-<button
-  id="downloadBtn"
-  class="downloadBtn"
-  type="button">
-  DOWNLOAD
-</button>
-```
-
-  </div>
-
-</section>
-
-<!-- =========================================================
-     MEDIAPIPE SELFIE SEGMENTATION
-========================================================= -->
-
+```html
+<!-- MediaPipe Selfie Segmentation -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 
 <script>
-
 /* =========================================================
-   CONFIGURATION
-========================================================= */
+   WHITE BACKGROUND / PERSON SEGMENTATION
+   Optimized for ID photos
+   ========================================================= */
 
-const OUTPUT_WIDTH  = 350;
+const OUTPUT_WIDTH = 350;
 const OUTPUT_HEIGHT = 450;
 
-/*
-  White background.
-*/
-const BACKGROUND_COLOR = "#FFFFFF";
-
-/*
-  Segmentation model.
-
-  0 = general
-  1 = landscape
-
-  Model 1 is normally better for full-body / wider scenes.
-  For ID photos we use model 1 because it handles camera
-  frames reasonably well.
-*/
-const SEGMENTATION_MODEL = 1;
-
-
-/* =========================================================
-   ELEMENTS
-========================================================= */
-
-const idScreen       = document.getElementById("idScreen");
-const cameraScreen   = document.getElementById("cameraScreen");
-const previewScreen  = document.getElementById("previewScreen");
-
-const studentId      = document.getElementById("studentId");
-
-const startBtn       = document.getElementById("startBtn");
-const switchBtn      = document.getElementById("switchBtn");
-const captureBtn     = document.getElementById("captureBtn");
-
-const retakeBtn      = document.getElementById("retakeBtn");
-const downloadBtn    = document.getElementById("downloadBtn");
-
-const video          = document.getElementById("video");
-
-const cameraStatus   = document.getElementById("cameraStatus");
-const cameraSelect   = document.getElementById("cameraSelect");
-
-const errorPanel     = document.getElementById("errorPanel");
-const errorText      = document.getElementById("errorText");
-const retryBtn       = document.getElementById("retryBtn");
-
-const previewImage   = document.getElementById("previewImage");
-
-const loading        = document.getElementById("loading");
-const loadingText    = document.getElementById("loadingText");
-
-
-/* =========================================================
-   VARIABLES
-========================================================= */
-
-let stream = null;
-
-let cameras = [];
-
-let currentCameraIndex = 0;
-
-let currentFacing = "environment";
-
-let capturedBlob = null;
-
-let capturedURL = null;
-
-let studentIDValue = "";
-
-
-/*
-  MediaPipe segmentation object.
-*/
 let selfieSegmentation = null;
-
 let segmentationReady = false;
 
+/* Initialize MediaPipe */
+async function initializeSegmentation() {
 
-/* =========================================================
-   SCREEN CONTROL
-========================================================= */
+    if (segmentationReady) return;
 
-function showScreen(screen){
-
-  idScreen.classList.remove("active");
-  cameraScreen.classList.remove("active");
-  previewScreen.classList.remove("active");
-
-  screen.classList.add("active");
-
-}
-
-
-/* =========================================================
-   LOADING
-========================================================= */
-
-function setLoading(show,text){
-
-  if(show){
-
-    loading.classList.add("show");
-
-    loadingText.textContent =
-      text || "Please wait...";
-
-  }else{
-
-    loading.classList.remove("show");
-
-  }
-
-}
-
-
-/* =========================================================
-   ERROR
-========================================================= */
-
-function showError(message){
-
-  errorText.textContent = message;
-
-  errorPanel.classList.add("show");
-
-  cameraStatus.textContent =
-    "Camera unavailable";
-
-}
-
-function hideError(){
-
-  errorPanel.classList.remove("show");
-
-}
-
-
-/* =========================================================
-   STOP CAMERA
-========================================================= */
-
-function stopCamera(){
-
-  if(stream){
-
-    stream.getTracks().forEach(track => {
-
-      try{
-        track.stop();
-      }catch(e){}
-
+    selfieSegmentation = new SelfieSegmentation({
+        locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
+        }
     });
 
-    stream = null;
+    /*
+       MODEL 0 works better for close-up portraits.
+       Model 1 is optimized differently and can remove
+       parts of clothing/body.
+    */
+    selfieSegmentation.setOptions({
+        modelSelection: 0
+    });
 
-  }
-
-  video.srcObject = null;
-
+    segmentationReady = true;
 }
 
 
 /* =========================================================
-   CHECK CAMERA SUPPORT
-========================================================= */
+   RUN SEGMENTATION
+   ========================================================= */
 
-function checkCameraSupport(){
+function runSegmentation(image) {
 
-  if(!window.isSecureContext){
+    return new Promise(async (resolve, reject) => {
 
-    showError(
-      "Camera access requires a secure HTTPS connection.\n\n" +
-      "Open this Apps Script web app using its HTTPS URL."
-    );
+        if (!selfieSegmentation) {
+            await initializeSegmentation();
+        }
 
-    return false;
+        selfieSegmentation.onResults((results) => {
 
-  }
+            if (!results || !results.segmentationMask) {
+                reject(new Error("Segmentation failed"));
+                return;
+            }
 
-  if(!navigator.mediaDevices){
-
-    showError(
-      "This browser does not provide camera access.\n\n" +
-      "Please use Chrome, Brave, Edge, or another modern browser."
-    );
-
-    return false;
-
-  }
-
-  if(!navigator.mediaDevices.getUserMedia){
-
-    showError(
-      "Camera access is not supported by this browser."
-    );
-
-    return false;
-
-  }
-
-  return true;
-
-}
-
-
-/* =========================================================
-   INITIALIZE AI SEGMENTATION
-========================================================= */
-
-function initializeSegmentation(){
-
-  return new Promise((resolve,reject)=>{
-
-    try{
-
-      if(typeof SelfieSegmentation === "undefined"){
-
-        reject(
-          new Error(
-            "Selfie Segmentation library could not be loaded."
-          )
-        );
-
-        return;
-
-      }
-
-
-      selfieSegmentation =
-        new SelfieSegmentation({
-          locateFile: (file) => {
-
-            return
-              "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/" +
-              file;
-
-          }
-
+            resolve(results);
         });
 
+        try {
 
-      selfieSegmentation.setOptions({
+            await selfieSegmentation.send({
+                image: image
+            });
 
-        modelSelection:
-          SEGMENTATION_MODEL,
+        } catch (error) {
 
-        selfieMode:false
+            reject(error);
+        }
+    });
+}
 
-      });
+
+/* =========================================================
+   CREATE SOURCE FROM VIDEO
+   DO NOT CROP BEFORE SEGMENTATION
+   ========================================================= */
+
+function createFullVideoCanvas() {
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+
+    if (!width || !height) {
+        throw new Error("Camera image is not ready");
+    }
+
+    const canvas = document.createElement("canvas");
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d", {
+        willReadFrequently: true
+    });
+
+    ctx.drawImage(
+        video,
+        0,
+        0,
+        width,
+        height
+    );
+
+    return canvas;
+}
 
 
-      selfieSegmentation.onResults(
-        results => {
+/* =========================================================
+   APPLY WHITE BACKGROUND
+   ========================================================= */
 
-          segmentationReady = true;
+async function applyWhiteBackground(sourceCanvas) {
 
-          /*
-            Store the latest segmentation result.
-            This callback is used by capture processing.
-          */
-          window.__segmentationResults =
-            results;
+    const results = await runSegmentation(sourceCanvas);
+
+    const width = sourceCanvas.width;
+    const height = sourceCanvas.height;
+
+    /* Final canvas */
+    const output = document.createElement("canvas");
+
+    output.width = width;
+    output.height = height;
+
+    const outCtx = output.getContext("2d", {
+        willReadFrequently: true
+    });
+
+    /* -----------------------------------------
+       1. White background
+       ----------------------------------------- */
+
+    outCtx.fillStyle = "#FFFFFF";
+    outCtx.fillRect(
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    /* -----------------------------------------
+       2. Person layer
+       ----------------------------------------- */
+
+    const personCanvas = document.createElement("canvas");
+
+    personCanvas.width = width;
+    personCanvas.height = height;
+
+    const personCtx = personCanvas.getContext("2d", {
+        willReadFrequently: true
+    });
+
+    personCtx.drawImage(
+        sourceCanvas,
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    /* -----------------------------------------
+       3. Get person mask
+       ----------------------------------------- */
+
+    const maskCanvas = document.createElement("canvas");
+
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+
+    const maskCtx = maskCanvas.getContext("2d", {
+        willReadFrequently: true
+    });
+
+    maskCtx.drawImage(
+        results.segmentationMask,
+        0,
+        0,
+        width,
+        height
+    );
+
+    const imageData = personCtx.getImageData(
+        0,
+        0,
+        width,
+        height
+    );
+
+    const maskData = maskCtx.getImageData(
+        0,
+        0,
+        width,
+        height
+    );
+
+    const pixels = imageData.data;
+    const maskPixels = maskData.data;
+
+
+    /* -----------------------------------------
+       4. Build soft mask
+       
+       IMPORTANT:
+       We no longer use an aggressive threshold.
+       This keeps the shirt and shoulders.
+       ----------------------------------------- */
+
+    for (let i = 0; i < pixels.length; i += 4) {
+
+        /*
+           MediaPipe mask:
+           white = person
+           black = background
+        */
+
+        const maskValue = maskPixels[i];
+
+        /*
+           Soft transition.
+
+           20 = definitely background
+           80 = mostly background
+           160+ = person
+        */
+
+        let alpha;
+
+        if (maskValue < 20) {
+
+            alpha = 0;
+
+        } else if (maskValue > 160) {
+
+            alpha = 255;
+
+        } else {
+
+            alpha =
+                ((maskValue - 20) / 140) * 255;
 
         }
-      );
 
-
-      resolve();
-
-    }catch(error){
-
-      reject(error);
-
+        pixels[i + 3] = alpha;
     }
 
-  });
 
+    personCtx.putImageData(
+        imageData,
+        0,
+        0
+    );
+
+
+    /* -----------------------------------------
+       5. Composite person onto white
+       ----------------------------------------- */
+
+    outCtx.drawImage(
+        personCanvas,
+        0,
+        0
+    );
+
+
+    return output;
 }
 
 
 /* =========================================================
-   GET CAMERA DEVICES
-========================================================= */
+   CROP TO 7:9 AFTER BACKGROUND REMOVAL
+   ========================================================= */
 
-async function getCameras(){
+function cropToIDPhoto(sourceCanvas) {
 
-  try{
+    const sourceWidth = sourceCanvas.width;
+    const sourceHeight = sourceCanvas.height;
 
-    const devices =
-      await navigator.mediaDevices.enumerateDevices();
+    const targetRatio =
+        OUTPUT_WIDTH / OUTPUT_HEIGHT;
 
-    cameras = devices.filter(
-      device => device.kind === "videoinput"
+    const sourceRatio =
+        sourceWidth / sourceHeight;
+
+    let cropWidth;
+    let cropHeight;
+    let cropX;
+    let cropY;
+
+
+    if (sourceRatio > targetRatio) {
+
+        /*
+           Source is wider.
+           Crop left/right.
+        */
+
+        cropHeight = sourceHeight;
+
+        cropWidth =
+            sourceHeight * targetRatio;
+
+        cropX =
+            (sourceWidth - cropWidth) / 2;
+
+        cropY = 0;
+
+    } else {
+
+        /*
+           Source is taller.
+           Crop top/bottom.
+        */
+
+        cropWidth = sourceWidth;
+
+        cropHeight =
+            sourceWidth / targetRatio;
+
+        cropX = 0;
+
+        cropY =
+            (sourceHeight - cropHeight) / 2;
+    }
+
+
+    const finalCanvas = document.createElement("canvas");
+
+    finalCanvas.width = OUTPUT_WIDTH;
+    finalCanvas.height = OUTPUT_HEIGHT;
+
+    const ctx = finalCanvas.getContext("2d");
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+
+    ctx.drawImage(
+        sourceCanvas,
+
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
+
+        0,
+        0,
+        OUTPUT_WIDTH,
+        OUTPUT_HEIGHT
     );
 
-    cameraSelect.innerHTML = "";
 
-    cameras.forEach((camera,index)=>{
-
-      const option =
-        document.createElement("option");
-
-      option.value = camera.deviceId;
-
-      option.textContent =
-        camera.label ||
-        `Camera ${index + 1}`;
-
-      cameraSelect.appendChild(option);
-
-    });
-
-
-    cameraSelect.style.display =
-      cameras.length > 1
-      ? "block"
-      : "none";
-
-    return cameras;
-
-  }catch(error){
-
-    console.error(
-      "enumerateDevices error:",
-      error
-    );
-
-    return [];
-
-  }
-
+    return finalCanvas;
 }
 
 
 /* =========================================================
-   FIND CAMERA BY FACING MODE
-========================================================= */
+   FINAL CAPTURE
+   ========================================================= */
 
-function findCameraByFacing(facing){
+async function capturePhoto() {
 
-  const text =
-    cameras.map(camera =>
-      (camera.label || "").toLowerCase()
-    );
+    try {
 
-  if(facing === "environment"){
+        if (!video.videoWidth || !video.videoHeight) {
 
-    const index = text.findIndex(label =>
-      label.includes("back") ||
-      label.includes("rear") ||
-      label.includes("environment") ||
-      label.includes("world")
-    );
-
-    if(index >= 0){
-      return cameras[index];
-    }
-
-  }
-
-  if(facing === "user"){
-
-    const index = text.findIndex(label =>
-      label.includes("front") ||
-      label.includes("user") ||
-      label.includes("integrated") ||
-      label.includes("internal")
-    );
-
-    if(index >= 0){
-      return cameras[index];
-    }
-
-  }
-
-  return null;
-
-}
-
-
-/* =========================================================
-   OPEN CAMERA
-========================================================= */
-
-async function openCamera(){
-
-  if(!checkCameraSupport()){
-    return false;
-  }
-
-  hideError();
-
-  setLoading(
-    true,
-    "Requesting camera permission..."
-  );
-
-  stopCamera();
-
-  try{
-
-    let initialConstraints = {
-
-      video:{
-        width:{
-          ideal:1280
-        },
-
-        height:{
-          ideal:720
-        },
-
-        facingMode:{
-          ideal:currentFacing
+            alert("Camera is not ready yet.");
+            return;
         }
-      },
 
-      audio:false
 
-    };
+        /* -----------------------------------------
+           SHOW PROCESSING
+           ----------------------------------------- */
 
+        const oldText =
+            captureBtn.innerHTML;
 
-    stream =
-      await navigator.mediaDevices.getUserMedia(
-        initialConstraints
-      );
+        captureBtn.innerHTML =
+            "⏳ PROCESSING...";
 
+        captureBtn.disabled = true;
 
-    video.srcObject = stream;
 
-    await video.play();
+        /* -----------------------------------------
+           STEP 1
+           Capture FULL camera frame
+           ----------------------------------------- */
 
+        const fullCanvas =
+            createFullVideoCanvas();
 
-    await getCameras();
 
+        /* -----------------------------------------
+           STEP 2
+           Remove background
+           ----------------------------------------- */
 
-    const track =
-      stream.getVideoTracks()[0];
+        const whiteCanvas =
+            await applyWhiteBackground(
+                fullCanvas
+            );
 
-    const settings =
-      track.getSettings();
 
+        /* -----------------------------------------
+           STEP 3
+           Crop AFTER segmentation
+           ----------------------------------------- */
 
-    console.log(
-      "Active camera:",
-      settings
-    );
+        const finalCanvas =
+            cropToIDPhoto(
+                whiteCanvas
+            );
 
 
-    if(settings.facingMode){
-
-      currentFacing =
-        settings.facingMode;
-
-      updateMirror();
-
-    }
-
-
-    cameraStatus.textContent =
-      "Camera ready";
-
-    setLoading(false);
-
-    return true;
-
-  }catch(error){
-
-    console.error(
-      "Camera start error:",
-      error
-    );
-
-    setLoading(false);
-
-    stopCamera();
-
-    handleCameraError(error);
-
-    return false;
-
-  }
-
-}
-
-
-/* =========================================================
-   OPEN SPECIFIC CAMERA
-========================================================= */
-
-async function openSpecificCamera(deviceId){
-
-  if(!checkCameraSupport()){
-    return false;
-  }
-
-  hideError();
-
-  setLoading(
-    true,
-    "Switching camera..."
-  );
-
-  stopCamera();
-
-  try{
-
-    try{
-
-      stream =
-        await navigator.mediaDevices.getUserMedia({
-
-          video:{
-            deviceId:{
-              exact:deviceId
-            },
-
-            width:{
-              ideal:1280
-            },
-
-            height:{
-              ideal:720
-            }
-          },
-
-          audio:false
-
-        });
-
-    }catch(firstError){
-
-      console.warn(
-        "Exact device failed. Trying fallback.",
-        firstError
-      );
-
-      stream =
-        await navigator.mediaDevices.getUserMedia({
-
-          video:{
-            facingMode:{
-              ideal:currentFacing
-            },
-
-            width:{
-              ideal:1280
-            },
-
-            height:{
-              ideal:720
-            }
-          },
-
-          audio:false
-
-        });
-
-    }
-
-
-    video.srcObject = stream;
-
-    await video.play();
-
-
-    const track =
-      stream.getVideoTracks()[0];
-
-    const settings =
-      track.getSettings();
-
-
-    console.log(
-      "Selected camera settings:",
-      settings
-    );
-
-
-    if(settings.facingMode){
-
-      currentFacing =
-        settings.facingMode;
-
-    }
-
-
-    updateMirror();
-
-    cameraStatus.textContent =
-      "Camera ready";
-
-    setLoading(false);
-
-    return true;
-
-  }catch(error){
-
-    console.error(
-      "Specific camera error:",
-      error
-    );
-
-    setLoading(false);
-
-    stopCamera();
-
-    handleCameraError(error);
-
-    return false;
-
-  }
-
-}
-
-
-/* =========================================================
-   SWITCH CAMERA
-========================================================= */
-
-async function switchCamera(){
-
-  hideError();
-
-  if(cameras.length > 1){
-
-    currentCameraIndex =
-      (currentCameraIndex + 1)
-      % cameras.length;
-
-    const camera =
-      cameras[currentCameraIndex];
-
-    cameraSelect.value =
-      camera.deviceId;
-
-    await openSpecificCamera(
-      camera.deviceId
-    );
-
-    return;
-
-  }
-
-
-  currentFacing =
-    currentFacing === "environment"
-    ? "user"
-    : "environment";
-
-  await openCamera();
-
-}
-
-
-/* =========================================================
-   MIRROR
-========================================================= */
-
-function updateMirror(){
-
-  /*
-    Final ID photo is always unmirrored.
-  */
-
-  video.classList.remove("mirror");
-
-}
-
-
-/* =========================================================
-   CAMERA ERROR HANDLING
-========================================================= */
-
-function handleCameraError(error){
-
-  let message =
-    "Unable to start the camera.";
-
-  switch(error.name){
-
-    case "NotAllowedError":
-
-      message =
-        "Camera permission was denied.\n\n" +
-        "On Android/Brave:\n" +
-        "1. Tap the lock/settings icon beside the address.\n" +
-        "2. Open Permissions.\n" +
-        "3. Allow Camera.\n" +
-        "4. Reload the page.\n\n" +
-        "Also make sure another application is not using the camera.";
-
-      break;
-
-
-    case "NotFoundError":
-
-      message =
-        "No camera was found.\n\n" +
-        "Check that the device has a working camera.";
-
-      break;
-
-
-    case "NotReadableError":
-
-      message =
-        "The camera exists, but the browser could not read it.\n\n" +
-        "Another application may already be using the camera.\n\n" +
-        "Close other camera applications and try again.";
-
-      break;
-
-
-    case "OverconstrainedError":
-
-      message =
-        "The selected camera does not support the requested settings.\n\n" +
-        "The app will retry using simpler camera settings.";
-
-      break;
-
-
-    case "SecurityError":
-
-      message =
-        "The browser blocked camera access for security reasons.\n\n" +
-        "Make sure this page is running over HTTPS.";
-
-      break;
-
-
-    case "AbortError":
-
-      message =
-        "Camera startup was interrupted.\n\n" +
-        "Please try again.";
-
-      break;
-
-
-    default:
-
-      message =
-        "Camera error:\n" +
-        error.name +
-        "\n\n" +
-        (error.message || "Unknown error.");
-
-  }
-
-  showError(message);
-
-}
-
-
-/* =========================================================
-   CREATE CROPPED SOURCE CANVAS
-========================================================= */
-
-function createSourceCanvas(){
-
-  const canvas =
-    document.createElement("canvas");
-
-  canvas.width =
-    OUTPUT_WIDTH;
-
-  canvas.height =
-    OUTPUT_HEIGHT;
-
-  const ctx =
-    canvas.getContext("2d");
-
-  const sourceWidth =
-    video.videoWidth;
-
-  const sourceHeight =
-    video.videoHeight;
-
-
-  const targetRatio =
-    OUTPUT_WIDTH / OUTPUT_HEIGHT;
-
-  const sourceRatio =
-    sourceWidth / sourceHeight;
-
-
-  let sx = 0;
-  let sy = 0;
-  let sw = sourceWidth;
-  let sh = sourceHeight;
-
-
-  if(sourceRatio > targetRatio){
-
-    sw =
-      sourceHeight * targetRatio;
-
-    sx =
-      (sourceWidth - sw) / 2;
-
-  }else{
-
-    sh =
-      sourceWidth / targetRatio;
-
-    sy =
-      (sourceHeight - sh) / 2;
-
-  }
-
-
-  ctx.drawImage(
-    video,
-    sx,
-    sy,
-    sw,
-    sh,
-    0,
-    0,
-    OUTPUT_WIDTH,
-    OUTPUT_HEIGHT
-  );
-
-
-  return canvas;
-
-}
-
-
-/* =========================================================
-   SEGMENT PERSON AND CREATE WHITE BACKGROUND
-========================================================= */
-
-async function removeBackground(sourceCanvas){
-
-  /*
-    If AI segmentation isn't available,
-    return normal image.
-  */
-
-  if(!selfieSegmentation){
-
-    console.warn(
-      "Segmentation not initialized."
-    );
-
-    return sourceCanvas;
-
-  }
-
-
-  /*
-    The MediaPipe model processes the camera frame.
-  */
-
-  window.__segmentationResults = null;
-
-
-  try{
-
-    await selfieSegmentation.send({
-      image:sourceCanvas
-    });
-
-  }catch(error){
-
-    console.error(
-      "Segmentation error:",
-      error
-    );
-
-    return sourceCanvas;
-
-  }
-
-
-  const results =
-    window.__segmentationResults;
-
-
-  if(
-    !results ||
-    !results.segmentationMask
-  ){
-
-    console.warn(
-      "No segmentation mask returned."
-    );
-
-    return sourceCanvas;
-
-  }
-
-
-  /*
-    Create output.
-  */
-
-  const outputCanvas =
-    document.createElement("canvas");
-
-  outputCanvas.width =
-    OUTPUT_WIDTH;
-
-  outputCanvas.height =
-    OUTPUT_HEIGHT;
-
-  const ctx =
-    outputCanvas.getContext("2d");
-
-
-  /*
-    STEP 1:
-    Paint the entire background white.
-  */
-
-  ctx.fillStyle =
-    BACKGROUND_COLOR;
-
-  ctx.fillRect(
-    0,
-    0,
-    OUTPUT_WIDTH,
-    OUTPUT_HEIGHT
-  );
-
-
-  /*
-    STEP 2:
-    Create temporary canvas containing
-    the original person image.
-  */
-
-  const personCanvas =
-    document.createElement("canvas");
-
-  personCanvas.width =
-    OUTPUT_WIDTH;
-
-  personCanvas.height =
-    OUTPUT_HEIGHT;
-
-  const personCtx =
-    personCanvas.getContext("2d");
-
-
-  personCtx.drawImage(
-    sourceCanvas,
-    0,
-    0,
-    OUTPUT_WIDTH,
-    OUTPUT_HEIGHT
-  );
-
-
-  /*
-    STEP 3:
-    Use the segmentation mask as alpha.
-  */
-
-  const maskCanvas =
-    document.createElement("canvas");
-
-  maskCanvas.width =
-    OUTPUT_WIDTH;
-
-  maskCanvas.height =
-    OUTPUT_HEIGHT;
-
-  const maskCtx =
-    maskCanvas.getContext("2d");
-
-
-  maskCtx.drawImage(
-    results.segmentationMask,
-    0,
-    0,
-    OUTPUT_WIDTH,
-    OUTPUT_HEIGHT
-  );
-
-
-  /*
-    Read mask pixels.
-  */
-
-  const maskData =
-    maskCtx.getImageData(
-      0,
-      0,
-      OUTPUT_WIDTH,
-      OUTPUT_HEIGHT
-    );
-
-
-  const personData =
-    personCtx.getImageData(
-      0,
-      0,
-      OUTPUT_WIDTH,
-      OUTPUT_HEIGHT
-    );
-
-
-  /*
-    Use mask brightness as alpha.
-
-    MediaPipe generally returns a grayscale
-    confidence mask.
-  */
-
-  for(
-    let i = 0;
-    i < maskData.data.length;
-    i += 4
-  ){
-
-    /*
-      Mask value.
-    */
-
-    const mask =
-      maskData.data[i];
-
-
-    /*
-      Slight thresholding.
-
-      This helps remove background noise.
-    */
-
-    let alpha;
-
-    if(mask < 70){
-
-      alpha = 0;
-
-    }else if(mask > 180){
-
-      alpha = 255;
-
-    }else{
-
-      /*
-        Smooth transition around hair/body edges.
-      */
-
-      alpha =
-        Math.round(
-          ((mask - 70) / 110) * 255
-        );
-
-    }
-
-
-    personData.data[i + 3] =
-      alpha;
-
-  }
-
-
-  personCtx.putImageData(
-    personData,
-    0,
-    0
-  );
-
-
-  /*
-    STEP 4:
-    White background is already underneath.
-
-    Now place the segmented person on top.
-  */
-
-  ctx.drawImage(
-    personCanvas,
-    0,
-    0
-  );
-
-
-  return outputCanvas;
-
-}
-
-
-/* =========================================================
-   CAPTURE PHOTO
-========================================================= */
-
-async function capturePhoto(){
-
-  if(!stream){
-
-    showError(
-      "Camera is not ready."
-    );
-
-    return;
-
-  }
-
-
-  if(
-    !video.videoWidth ||
-    !video.videoHeight
-  ){
-
-    showError(
-      "Camera image is not ready yet.\n\n" +
-      "Please wait a moment and try again."
-    );
-
-    return;
-
-  }
-
-
-  captureBtn.disabled = true;
-
-  cameraStatus.textContent =
-    "Capturing...";
-
-
-  try{
-
-    /*
-      Create exact 350 x 450 source.
-    */
-
-    const sourceCanvas =
-      createSourceCanvas();
-
-
-    /*
-      Run background removal.
-    */
-
-    setLoading(
-      true,
-      "Removing background..."
-    );
-
-
-    let finalCanvas;
-
-
-    try{
-
-      finalCanvas =
-        await removeBackground(
-          sourceCanvas
-        );
-
-    }catch(error){
-
-      console.error(
-        "Background removal failed:",
-        error
-      );
-
-      /*
-        Safety fallback:
-        use original image.
-      */
-
-      finalCanvas =
-        sourceCanvas;
-
-    }
-
-
-    /*
-      Convert final image to PNG.
-    */
-
-    capturedBlob =
-      await new Promise(resolve => {
+        /* -----------------------------------------
+           STEP 4
+           Convert to PNG
+           ----------------------------------------- */
 
         finalCanvas.toBlob(
-          resolve,
-          "image/png",
-          1.0
+            (blob) => {
+
+                if (!blob) {
+
+                    alert(
+                        "Unable to create photo."
+                    );
+
+                    captureBtn.disabled = false;
+                    captureBtn.innerHTML = oldText;
+
+                    return;
+                }
+
+
+                capturedBlob = blob;
+
+
+                if (capturedURL) {
+                    URL.revokeObjectURL(
+                        capturedURL
+                    );
+                }
+
+
+                capturedURL =
+                    URL.createObjectURL(blob);
+
+
+                /* ---------------------------------
+                   Show preview
+                   --------------------------------- */
+
+                previewImage.src =
+                    capturedURL;
+
+
+                /* ---------------------------------
+                   Switch UI
+                   --------------------------------- */
+
+                cameraScreen.classList.add(
+                    "hidden"
+                );
+
+                previewScreen.classList.remove(
+                    "hidden"
+                );
+
+
+                captureBtn.disabled = false;
+
+                captureBtn.innerHTML =
+                    oldText;
+
+            },
+            "image/png"
         );
 
-      });
 
+    } catch (error) {
 
-    if(!capturedBlob){
+        console.error(
+            "Photo processing error:",
+            error
+        );
 
-      throw new Error(
-        "Could not create PNG."
-      );
+        alert(
+            "Unable to process the photo. " +
+            "Please try again."
+        );
 
+        captureBtn.disabled = false;
+
+        captureBtn.innerHTML =
+            "📸 CAPTURE";
     }
-
-
-    /*
-      Preview URL.
-    */
-
-    if(capturedURL){
-
-      URL.revokeObjectURL(
-        capturedURL
-      );
-
-    }
-
-
-    capturedURL =
-      URL.createObjectURL(
-        capturedBlob
-      );
-
-
-    previewImage.src =
-      capturedURL;
-
-
-    /*
-      Stop camera.
-    */
-
-    stopCamera();
-
-
-    setLoading(false);
-
-
-    showScreen(
-      previewScreen
-    );
-
-
-  }catch(error){
-
-    console.error(
-      "Capture error:",
-      error
-    );
-
-    setLoading(false);
-
-    showError(
-      "Unable to capture the photo.\n\n" +
-      error.message
-    );
-
-  }finally{
-
-    captureBtn.disabled = false;
-
-  }
-
 }
 
 
 /* =========================================================
-   DOWNLOAD
-========================================================= */
-
-function downloadPhoto(){
-
-  if(!capturedBlob){
-
-    alert(
-      "There is no captured photo."
-    );
-
-    return;
-
-  }
-
-
-  if(!studentIDValue){
-
-    alert(
-      "Student ID is missing."
-    );
-
-    return;
-
-  }
-
-
-  const safeID =
-    studentIDValue
-      .trim()
-      .replace(
-        /[^a-zA-Z0-9_-]/g,
-        ""
-      );
-
-
-  if(!safeID){
-
-    alert(
-      "Invalid Student ID."
-    );
-
-    return;
-
-  }
-
-
-  const filename =
-    safeID + ".png";
-
-
-  const url =
-    URL.createObjectURL(
-      capturedBlob
-    );
-
-
-  const link =
-    document.createElement("a");
-
-  link.href = url;
-
-  link.download = filename;
-
-  link.style.display = "none";
-
-  document.body.appendChild(link);
-
-  link.click();
-
-  document.body.removeChild(link);
-
-
-  setTimeout(()=>{
-
-    URL.revokeObjectURL(url);
-
-  },1000);
-
-
-  setTimeout(()=>{
-
-    resetEverything();
-
-    showScreen(
-      idScreen
-    );
-
-    studentId.focus();
-
-  },500);
-
-}
-
-
-/* =========================================================
-   RETAKE
-========================================================= */
-
-async function retakePhoto(){
-
-  capturedBlob = null;
-
-  if(capturedURL){
-
-    URL.revokeObjectURL(
-      capturedURL
-    );
-
-    capturedURL = null;
-
-  }
-
-
-  previewImage.removeAttribute("src");
-
-
-  showScreen(
-    cameraScreen
-  );
-
-
-  await openCamera();
-
-}
-
-
-/* =========================================================
-   RESET
-========================================================= */
-
-function resetEverything(){
-
-  stopCamera();
-
-  hideError();
-
-  capturedBlob = null;
-
-
-  if(capturedURL){
-
-    URL.revokeObjectURL(
-      capturedURL
-    );
-
-    capturedURL = null;
-
-  }
-
-
-  previewImage.removeAttribute("src");
-
-  studentIDValue = "";
-
-  studentId.value = "";
-
-  cameras = [];
-
-  currentCameraIndex = 0;
-
-  currentFacing = "environment";
-
-}
-
-
-/* =========================================================
-   START BUTTON
-========================================================= */
-
-startBtn.addEventListener(
-  "click",
-  async ()=>{
-
-    const id =
-      studentId.value.trim();
-
-
-    if(!id){
-
-      alert(
-        "Please enter the Student ID."
-      );
-
-      studentId.focus();
-
-      return;
-
-    }
-
-
-    studentIDValue =
-      id;
-
-
-    showScreen(
-      cameraScreen
-    );
-
-
-    await openCamera();
-
-  }
-);
-
-
-/* =========================================================
-   ENTER KEY
-========================================================= */
-
-studentId.addEventListener(
-  "keydown",
-  event => {
-
-    if(event.key === "Enter"){
-
-      event.preventDefault();
-
-      startBtn.click();
-
-    }
-
-  }
-);
-
-
-/* =========================================================
-   SWITCH
-========================================================= */
-
-switchBtn.addEventListener(
-  "click",
-  async ()=>{
-
-    await switchCamera();
-
-  }
-);
-
-
-/* =========================================================
-   CAMERA DROPDOWN
-========================================================= */
-
-cameraSelect.addEventListener(
-  "change",
-  async ()=>{
-
-    const deviceId =
-      cameraSelect.value;
-
-
-    if(!deviceId){
-      return;
-    }
-
-
-    await openSpecificCamera(
-      deviceId
-    );
-
-  }
-);
-
-
-/* =========================================================
-   CAPTURE
-========================================================= */
-
-captureBtn.addEventListener(
-  "click",
-  capturePhoto
-);
-
-
-/* =========================================================
-   RETAKE
-========================================================= */
-
-retakeBtn.addEventListener(
-  "click",
-  retakePhoto
-);
-
-
-/* =========================================================
-   DOWNLOAD
-========================================================= */
-
-downloadBtn.addEventListener(
-  "click",
-  downloadPhoto
-);
-
-
-/* =========================================================
-   RETRY
-========================================================= */
-
-retryBtn.addEventListener(
-  "click",
-  async ()=>{
-
-    hideError();
-
-    await openCamera();
-
-  }
-);
-
-
-/* =========================================================
-   PAGE VISIBILITY
-========================================================= */
-
-document.addEventListener(
-  "visibilitychange",
-  ()=>{
-
-    if(document.hidden){
-
-      stopCamera();
-
-    }
-
-  }
-);
-
-
-/* =========================================================
-   DEVICE CHANGE
-========================================================= */
-
-if(navigator.mediaDevices){
-
-  navigator.mediaDevices.addEventListener(
-    "devicechange",
-    async ()=>{
-
-      if(stream){
-
-        await getCameras();
-
-      }
-
-    }
-  );
-
-}
-
-
-/* =========================================================
-   INITIALIZATION
-========================================================= */
+   START SEGMENTATION WHEN PAGE LOADS
+   ========================================================= */
 
 window.addEventListener(
-  "load",
-  async ()=>{
+    "load",
+    () => {
 
-    studentId.focus();
+        initializeSegmentation()
+            .catch(error => {
 
+                console.error(
+                    "Segmentation initialization failed:",
+                    error
+                );
 
-    /*
-      Load AI segmentation in background.
-    */
-
-    try{
-
-      await initializeSegmentation();
-
-      console.log(
-        "White background AI ready."
-      );
-
-    }catch(error){
-
-      console.error(
-        "AI initialization failed:",
-        error
-      );
-
-      /*
-        Camera still works even if AI
-        cannot be loaded.
-      */
+            });
 
     }
-
-  }
 );
-
 </script>
+```
 
-</body>
-</html>
+### Important
+
+**Delete the old `removeBackground()` function completely.** Do not leave both versions in the HTML.
+
+The new processing order is:
+
+```text
+Camera
+   ↓
+Full camera frame
+   ↓
+AI detects entire person
+   ↓
+White background
+   ↓
+Crop to 350 × 450
+   ↓
+PNG
+```
+
+This is different from the old version:
+
+```text
+Camera
+   ↓
+Crop to 350 × 450
+   ↓
+AI segmentation
+   ↓
+❌ Shirt/body may disappear
+```
+
+The new version should keep the **head + shoulders + shirt/upper torso** while making the surrounding background white.
