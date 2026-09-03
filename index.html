@@ -1,14 +1,15 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 
 <meta name="viewport"
-      content="width=device-width,
-               initial-scale=1,
-               maximum-scale=1,
-               user-scalable=no,
-               viewport-fit=cover">
+   content="width=device-width,
+            initial-scale=1,
+            maximum-scale=1,
+            user-scalable=no,
+            viewport-fit=cover">
 
 <meta name="theme-color" content="#080b0d">
 
@@ -143,10 +144,6 @@ body{
   background:#000;
 }
 
-/*
-  Camera preview is NOT mirrored by default.
-  This gives a more natural ID-photo result.
-*/
 #video.mirror{
   transform:scaleX(-1);
 }
@@ -208,16 +205,40 @@ body{
 }
 
 /* =========================================================
+   WHITE BACKGROUND STATUS
+========================================================= */
+
+.backgroundStatus{
+  position:absolute;
+  z-index:8;
+
+  top:78px;
+  left:50%;
+
+  transform:translateX(-50%);
+
+  background:rgba(0,0,0,.58);
+  border:1px solid rgba(255,255,255,.15);
+
+  padding:7px 12px;
+
+  border-radius:20px;
+
+  font-size:11px;
+  color:#fff;
+
+  backdrop-filter:blur(8px);
+
+  white-space:nowrap;
+}
+
+/* =========================================================
    PHOTO GUIDE
 ========================================================= */
 
 .photoGuide{
   position:absolute;
   z-index:5;
-
-  /*
-    Exact 7:9 ratio
-  */
 
   width:min(70vw,350px);
   aspect-ratio:7 / 9;
@@ -403,7 +424,13 @@ body{
 .previewTitle{
   font-size:20px;
   font-weight:800;
-  margin-bottom:15px;
+  margin-bottom:8px;
+}
+
+.previewStatus{
+  font-size:12px;
+  color:#35d7ff;
+  margin-bottom:12px;
 }
 
 .previewCard{
@@ -473,7 +500,7 @@ body{
 
   inset:0;
 
-  background:rgba(0,0,0,.7);
+  background:rgba(0,0,0,.72);
 
   display:none;
 
@@ -506,6 +533,10 @@ body{
   font-size:13px;
 
   color:#d0d8db;
+
+  text-align:center;
+
+  padding:0 25px;
 }
 
 @keyframes spin{
@@ -553,6 +584,7 @@ body{
 
 }
 </style>
+
 </head>
 
 <body>
@@ -565,40 +597,41 @@ body{
 
   <div class="idBox">
 
-    <div class="logo">
-      DJIS
-    </div>
+```
+<div class="logo">
+  DJIS
+</div>
 
-    <div class="subtitle">
-      ID PHOTO BOOTH
-    </div>
+<div class="subtitle">
+  ID PHOTO BOOTH
+</div>
 
-    <input
-      id="studentId"
-      class="idInput"
-      type="text"
-      inputmode="numeric"
-      autocomplete="off"
-      placeholder="Enter Student ID"
-      maxlength="30"
-    >
+<input
+  id="studentId"
+  class="idInput"
+  type="text"
+  inputmode="numeric"
+  autocomplete="off"
+  placeholder="Enter Student ID"
+  maxlength="30"
+>
 
-    <button
-      id="startBtn"
-      class="startBtn"
-      type="button">
-      START CAPTURE
-    </button>
+<button
+  id="startBtn"
+  class="startBtn"
+  type="button">
+  START CAPTURE
+</button>
 
-    <div class="info">
-      Enter the ID number first.<br>
-      The ID will be used only for the downloaded filename.
-    </div>
+<div class="info">
+  Enter the ID number first.<br>
+  The ID will be used only for the downloaded filename.
+</div>
+```
 
   </div>
 
 </section>
-
 
 <!-- =========================================================
      SCREEN 2
@@ -606,36 +639,40 @@ body{
 
 <section id="cameraScreen" class="screen">
 
-  <video
-    id="video"
-    autoplay
-    playsinline
-    muted>
-  </video>
+<video
+ id="video"
+ autoplay
+ playsinline
+ muted> </video>
 
   <div class="cameraTop">
 
-    <div>
-      <div class="cameraTitle">
-        ID PHOTO
-      </div>
+```
+<div>
+  <div class="cameraTitle">
+    ID PHOTO
+  </div>
 
-      <div
-        id="cameraStatus"
-        class="cameraStatus">
-        Starting camera...
-      </div>
-    </div>
+  <div
+    id="cameraStatus"
+    class="cameraStatus">
+    Starting camera...
+  </div>
+</div>
 
-    <button
-      id="switchBtn"
-      class="switchBtn"
-      type="button">
-      ↻ Switch
-    </button>
+<button
+  id="switchBtn"
+  class="switchBtn"
+  type="button">
+  ↻ Switch
+</button>
+```
 
   </div>
 
+  <div class="backgroundStatus">
+    ✓ WHITE BACKGROUND
+  </div>
 
   <div class="photoGuide"></div>
 
@@ -643,61 +680,65 @@ body{
     7 : 9 PHOTO
   </div>
 
-
   <div class="cameraBottom">
 
-    <select
-      id="cameraSelect"
-      class="cameraSelect">
-    </select>
+```
+<select
+  id="cameraSelect"
+  class="cameraSelect">
+</select>
 
-    <button
-      id="captureBtn"
-      class="captureBtn"
-      type="button"
-      aria-label="Take photo">
-    </button>
+<button
+  id="captureBtn"
+  class="captureBtn"
+  type="button"
+  aria-label="Take photo">
+</button>
+```
 
   </div>
-
 
   <div
     id="errorPanel"
     class="errorPanel">
 
-    <div class="errorTitle">
-      CAMERA ERROR
-    </div>
+```
+<div class="errorTitle">
+  CAMERA ERROR
+</div>
 
-    <div
-      id="errorText"
-      class="errorText">
-    </div>
+<div
+  id="errorText"
+  class="errorText">
+</div>
 
-    <button
-      id="retryBtn"
-      class="retryBtn"
-      type="button">
-      TRY AGAIN
-    </button>
+<button
+  id="retryBtn"
+  class="retryBtn"
+  type="button">
+  TRY AGAIN
+</button>
+```
 
   </div>
-
 
   <div
     id="loading"
     class="loading">
 
-    <div class="spinner"></div>
+```
+<div class="spinner"></div>
 
-    <div class="loadingText">
-      Starting camera...
-    </div>
+<div
+  id="loadingText"
+  class="loadingText">
+  Starting camera...
+</div>
+```
 
   </div>
 
 </section>
-
 
 <!-- =========================================================
      SCREEN 3
@@ -709,34 +750,47 @@ body{
     PHOTO PREVIEW
   </div>
 
+  <div class="previewStatus">
+    ✓ WHITE BACKGROUND APPLIED
+  </div>
+
   <div class="previewCard">
 
-    <img
-      id="previewImage"
-      alt="Captured ID photo">
+```
+<img
+  id="previewImage"
+  alt="Captured ID photo">
+```
 
   </div>
 
   <div class="previewButtons">
 
-    <button
-      id="retakeBtn"
-      class="retakeBtn"
-      type="button">
-      RETAKE
-    </button>
+```
+<button
+  id="retakeBtn"
+  class="retakeBtn"
+  type="button">
+  RETAKE
+</button>
 
-    <button
-      id="downloadBtn"
-      class="downloadBtn"
-      type="button">
-      DOWNLOAD
-    </button>
+<button
+  id="downloadBtn"
+  class="downloadBtn"
+  type="button">
+  DOWNLOAD
+</button>
+```
 
   </div>
 
 </section>
 
+<!-- =========================================================
+     MEDIAPIPE SELFIE SEGMENTATION
+========================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 
 <script>
 
@@ -746,6 +800,23 @@ body{
 
 const OUTPUT_WIDTH  = 350;
 const OUTPUT_HEIGHT = 450;
+
+/*
+  White background.
+*/
+const BACKGROUND_COLOR = "#FFFFFF";
+
+/*
+  Segmentation model.
+
+  0 = general
+  1 = landscape
+
+  Model 1 is normally better for full-body / wider scenes.
+  For ID photos we use model 1 because it handles camera
+  frames reasonably well.
+*/
+const SEGMENTATION_MODEL = 1;
 
 
 /* =========================================================
@@ -777,6 +848,7 @@ const retryBtn       = document.getElementById("retryBtn");
 const previewImage   = document.getElementById("previewImage");
 
 const loading        = document.getElementById("loading");
+const loadingText    = document.getElementById("loadingText");
 
 
 /* =========================================================
@@ -796,6 +868,14 @@ let capturedBlob = null;
 let capturedURL = null;
 
 let studentIDValue = "";
+
+
+/*
+  MediaPipe segmentation object.
+*/
+let selfieSegmentation = null;
+
+let segmentationReady = false;
 
 
 /* =========================================================
@@ -823,8 +903,8 @@ function setLoading(show,text){
 
     loading.classList.add("show");
 
-    loading.querySelector(".loadingText")
-      .textContent = text || "Please wait...";
+    loadingText.textContent =
+      text || "Please wait...";
 
   }else{
 
@@ -845,7 +925,8 @@ function showError(message){
 
   errorPanel.classList.add("show");
 
-  cameraStatus.textContent = "Camera unavailable";
+  cameraStatus.textContent =
+    "Camera unavailable";
 
 }
 
@@ -925,6 +1006,81 @@ function checkCameraSupport(){
 
 
 /* =========================================================
+   INITIALIZE AI SEGMENTATION
+========================================================= */
+
+function initializeSegmentation(){
+
+  return new Promise((resolve,reject)=>{
+
+    try{
+
+      if(typeof SelfieSegmentation === "undefined"){
+
+        reject(
+          new Error(
+            "Selfie Segmentation library could not be loaded."
+          )
+        );
+
+        return;
+
+      }
+
+
+      selfieSegmentation =
+        new SelfieSegmentation({
+          locateFile: (file) => {
+
+            return
+              "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/" +
+              file;
+
+          }
+
+        });
+
+
+      selfieSegmentation.setOptions({
+
+        modelSelection:
+          SEGMENTATION_MODEL,
+
+        selfieMode:false
+
+      });
+
+
+      selfieSegmentation.onResults(
+        results => {
+
+          segmentationReady = true;
+
+          /*
+            Store the latest segmentation result.
+            This callback is used by capture processing.
+          */
+          window.__segmentationResults =
+            results;
+
+        }
+      );
+
+
+      resolve();
+
+    }catch(error){
+
+      reject(error);
+
+    }
+
+  });
+
+}
+
+
+/* =========================================================
    GET CAMERA DEVICES
 ========================================================= */
 
@@ -956,9 +1112,6 @@ async function getCameras(){
 
     });
 
-    /*
-      Only show dropdown if more than one camera
-    */
 
     cameraSelect.style.display =
       cameras.length > 1
@@ -994,11 +1147,6 @@ function findCameraByFacing(facing){
 
   if(facing === "environment"){
 
-    /*
-      Rear / world-facing cameras often contain:
-      back, rear, environment, world
-    */
-
     const index = text.findIndex(label =>
       label.includes("back") ||
       label.includes("rear") ||
@@ -1013,11 +1161,6 @@ function findCameraByFacing(facing){
   }
 
   if(facing === "user"){
-
-    /*
-      Front cameras often contain:
-      front, user, integrated, internal
-    */
 
     const index = text.findIndex(label =>
       label.includes("front") ||
@@ -1049,20 +1192,14 @@ async function openCamera(){
 
   hideError();
 
-  setLoading(true,"Requesting camera permission...");
+  setLoading(
+    true,
+    "Requesting camera permission..."
+  );
 
   stopCamera();
 
   try{
-
-    /*
-      IMPORTANT:
-
-      First request is intentionally simple.
-
-      This is important on Android because camera labels
-      and device IDs can be hidden until permission is granted.
-    */
 
     let initialConstraints = {
 
@@ -1091,26 +1228,13 @@ async function openCamera(){
       );
 
 
-    /*
-      Attach stream
-    */
-
     video.srcObject = stream;
 
     await video.play();
 
 
-    /*
-      NOW that permission is granted,
-      enumerate cameras.
-    */
-
     await getCameras();
 
-
-    /*
-      Find actual active device.
-    */
 
     const track =
       stream.getVideoTracks()[0];
@@ -1125,10 +1249,6 @@ async function openCamera(){
     );
 
 
-    /*
-      Update current facing mode if browser reports it.
-    */
-
     if(settings.facingMode){
 
       currentFacing =
@@ -1141,7 +1261,6 @@ async function openCamera(){
 
     cameraStatus.textContent =
       "Camera ready";
-
 
     setLoading(false);
 
@@ -1179,15 +1298,14 @@ async function openSpecificCamera(deviceId){
 
   hideError();
 
-  setLoading(true,"Switching camera...");
+  setLoading(
+    true,
+    "Switching camera..."
+  );
 
   stopCamera();
 
   try{
-
-    /*
-      Try exact device first.
-    */
 
     try{
 
@@ -1218,11 +1336,6 @@ async function openSpecificCamera(deviceId){
         "Exact device failed. Trying fallback.",
         firstError
       );
-
-
-      /*
-        Android/Brave fallback
-      */
 
       stream =
         await navigator.mediaDevices.getUserMedia({
@@ -1311,10 +1424,6 @@ async function switchCamera(){
 
   hideError();
 
-  /*
-    First try device list if available.
-  */
-
   if(cameras.length > 1){
 
     currentCameraIndex =
@@ -1336,13 +1445,6 @@ async function switchCamera(){
   }
 
 
-  /*
-    If browser exposes only one device,
-    use facingMode.
-
-    This is especially useful on Android.
-  */
-
   currentFacing =
     currentFacing === "environment"
     ? "user"
@@ -1360,10 +1462,7 @@ async function switchCamera(){
 function updateMirror(){
 
   /*
-    For ID photos we normally want the final image
-    unmirrored.
-
-    Preview is also unmirrored.
+    Final ID photo is always unmirrored.
   */
 
   video.classList.remove("mirror");
@@ -1458,6 +1557,339 @@ function handleCameraError(error){
 
 
 /* =========================================================
+   CREATE CROPPED SOURCE CANVAS
+========================================================= */
+
+function createSourceCanvas(){
+
+  const canvas =
+    document.createElement("canvas");
+
+  canvas.width =
+    OUTPUT_WIDTH;
+
+  canvas.height =
+    OUTPUT_HEIGHT;
+
+  const ctx =
+    canvas.getContext("2d");
+
+  const sourceWidth =
+    video.videoWidth;
+
+  const sourceHeight =
+    video.videoHeight;
+
+
+  const targetRatio =
+    OUTPUT_WIDTH / OUTPUT_HEIGHT;
+
+  const sourceRatio =
+    sourceWidth / sourceHeight;
+
+
+  let sx = 0;
+  let sy = 0;
+  let sw = sourceWidth;
+  let sh = sourceHeight;
+
+
+  if(sourceRatio > targetRatio){
+
+    sw =
+      sourceHeight * targetRatio;
+
+    sx =
+      (sourceWidth - sw) / 2;
+
+  }else{
+
+    sh =
+      sourceWidth / targetRatio;
+
+    sy =
+      (sourceHeight - sh) / 2;
+
+  }
+
+
+  ctx.drawImage(
+    video,
+    sx,
+    sy,
+    sw,
+    sh,
+    0,
+    0,
+    OUTPUT_WIDTH,
+    OUTPUT_HEIGHT
+  );
+
+
+  return canvas;
+
+}
+
+
+/* =========================================================
+   SEGMENT PERSON AND CREATE WHITE BACKGROUND
+========================================================= */
+
+async function removeBackground(sourceCanvas){
+
+  /*
+    If AI segmentation isn't available,
+    return normal image.
+  */
+
+  if(!selfieSegmentation){
+
+    console.warn(
+      "Segmentation not initialized."
+    );
+
+    return sourceCanvas;
+
+  }
+
+
+  /*
+    The MediaPipe model processes the camera frame.
+  */
+
+  window.__segmentationResults = null;
+
+
+  try{
+
+    await selfieSegmentation.send({
+      image:sourceCanvas
+    });
+
+  }catch(error){
+
+    console.error(
+      "Segmentation error:",
+      error
+    );
+
+    return sourceCanvas;
+
+  }
+
+
+  const results =
+    window.__segmentationResults;
+
+
+  if(
+    !results ||
+    !results.segmentationMask
+  ){
+
+    console.warn(
+      "No segmentation mask returned."
+    );
+
+    return sourceCanvas;
+
+  }
+
+
+  /*
+    Create output.
+  */
+
+  const outputCanvas =
+    document.createElement("canvas");
+
+  outputCanvas.width =
+    OUTPUT_WIDTH;
+
+  outputCanvas.height =
+    OUTPUT_HEIGHT;
+
+  const ctx =
+    outputCanvas.getContext("2d");
+
+
+  /*
+    STEP 1:
+    Paint the entire background white.
+  */
+
+  ctx.fillStyle =
+    BACKGROUND_COLOR;
+
+  ctx.fillRect(
+    0,
+    0,
+    OUTPUT_WIDTH,
+    OUTPUT_HEIGHT
+  );
+
+
+  /*
+    STEP 2:
+    Create temporary canvas containing
+    the original person image.
+  */
+
+  const personCanvas =
+    document.createElement("canvas");
+
+  personCanvas.width =
+    OUTPUT_WIDTH;
+
+  personCanvas.height =
+    OUTPUT_HEIGHT;
+
+  const personCtx =
+    personCanvas.getContext("2d");
+
+
+  personCtx.drawImage(
+    sourceCanvas,
+    0,
+    0,
+    OUTPUT_WIDTH,
+    OUTPUT_HEIGHT
+  );
+
+
+  /*
+    STEP 3:
+    Use the segmentation mask as alpha.
+  */
+
+  const maskCanvas =
+    document.createElement("canvas");
+
+  maskCanvas.width =
+    OUTPUT_WIDTH;
+
+  maskCanvas.height =
+    OUTPUT_HEIGHT;
+
+  const maskCtx =
+    maskCanvas.getContext("2d");
+
+
+  maskCtx.drawImage(
+    results.segmentationMask,
+    0,
+    0,
+    OUTPUT_WIDTH,
+    OUTPUT_HEIGHT
+  );
+
+
+  /*
+    Read mask pixels.
+  */
+
+  const maskData =
+    maskCtx.getImageData(
+      0,
+      0,
+      OUTPUT_WIDTH,
+      OUTPUT_HEIGHT
+    );
+
+
+  const personData =
+    personCtx.getImageData(
+      0,
+      0,
+      OUTPUT_WIDTH,
+      OUTPUT_HEIGHT
+    );
+
+
+  /*
+    Use mask brightness as alpha.
+
+    MediaPipe generally returns a grayscale
+    confidence mask.
+  */
+
+  for(
+    let i = 0;
+    i < maskData.data.length;
+    i += 4
+  ){
+
+    /*
+      Mask value.
+    */
+
+    const mask =
+      maskData.data[i];
+
+
+    /*
+      Slight thresholding.
+
+      This helps remove background noise.
+    */
+
+    let alpha;
+
+    if(mask < 70){
+
+      alpha = 0;
+
+    }else if(mask > 180){
+
+      alpha = 255;
+
+    }else{
+
+      /*
+        Smooth transition around hair/body edges.
+      */
+
+      alpha =
+        Math.round(
+          ((mask - 70) / 110) * 255
+        );
+
+    }
+
+
+    personData.data[i + 3] =
+      alpha;
+
+  }
+
+
+  personCtx.putImageData(
+    personData,
+    0,
+    0
+  );
+
+
+  /*
+    STEP 4:
+    White background is already underneath.
+
+    Now place the segmented person on top.
+  */
+
+  ctx.drawImage(
+    personCanvas,
+    0,
+    0
+  );
+
+
+  return outputCanvas;
+
+}
+
+
+/* =========================================================
    CAPTURE PHOTO
 ========================================================= */
 
@@ -1473,7 +1905,11 @@ async function capturePhoto(){
 
   }
 
-  if(!video.videoWidth || !video.videoHeight){
+
+  if(
+    !video.videoWidth ||
+    !video.videoHeight
+  ){
 
     showError(
       "Camera image is not ready yet.\n\n" +
@@ -1493,106 +1929,63 @@ async function capturePhoto(){
 
   try{
 
-    const canvas =
-      document.createElement("canvas");
+    /*
+      Create exact 350 x 450 source.
+    */
 
-    canvas.width =
-      OUTPUT_WIDTH;
-
-    canvas.height =
-      OUTPUT_HEIGHT;
-
-
-    const ctx =
-      canvas.getContext("2d");
+    const sourceCanvas =
+      createSourceCanvas();
 
 
     /*
-      Source dimensions
+      Run background removal.
     */
 
-    const sourceWidth =
-      video.videoWidth;
-
-    const sourceHeight =
-      video.videoHeight;
-
-
-    /*
-      Target ratio = 7:9
-    */
-
-    const targetRatio =
-      OUTPUT_WIDTH / OUTPUT_HEIGHT;
-
-    const sourceRatio =
-      sourceWidth / sourceHeight;
+    setLoading(
+      true,
+      "Removing background..."
+    );
 
 
-    let sx = 0;
-    let sy = 0;
-    let sw = sourceWidth;
-    let sh = sourceHeight;
+    let finalCanvas;
 
 
-    /*
-      Center crop
-    */
+    try{
 
-    if(sourceRatio > targetRatio){
+      finalCanvas =
+        await removeBackground(
+          sourceCanvas
+        );
+
+    }catch(error){
+
+      console.error(
+        "Background removal failed:",
+        error
+      );
 
       /*
-        Source is too wide.
+        Safety fallback:
+        use original image.
       */
 
-      sw =
-        sourceHeight * targetRatio;
-
-      sx =
-        (sourceWidth - sw) / 2;
-
-    }else{
-
-      /*
-        Source is too tall.
-      */
-
-      sh =
-        sourceWidth / targetRatio;
-
-      sy =
-        (sourceHeight - sh) / 2;
+      finalCanvas =
+        sourceCanvas;
 
     }
 
 
     /*
-      Draw exact 350 x 450.
-    */
-
-    ctx.drawImage(
-      video,
-      sx,
-      sy,
-      sw,
-      sh,
-      0,
-      0,
-      OUTPUT_WIDTH,
-      OUTPUT_HEIGHT
-    );
-
-
-    /*
-      Convert to PNG.
+      Convert final image to PNG.
     */
 
     capturedBlob =
       await new Promise(resolve => {
 
-        canvas.toBlob(
+        finalCanvas.toBlob(
           resolve,
-          "image/png"
+          "image/png",
+          1.0
         );
 
       });
@@ -1608,7 +2001,7 @@ async function capturePhoto(){
 
 
     /*
-      Preview URL
+      Preview URL.
     */
 
     if(capturedURL){
@@ -1618,6 +2011,7 @@ async function capturePhoto(){
       );
 
     }
+
 
     capturedURL =
       URL.createObjectURL(
@@ -1630,15 +2024,19 @@ async function capturePhoto(){
 
 
     /*
-      Stop camera before preview.
+      Stop camera.
     */
 
     stopCamera();
 
 
+    setLoading(false);
+
+
     showScreen(
       previewScreen
     );
+
 
   }catch(error){
 
@@ -1646,6 +2044,8 @@ async function capturePhoto(){
       "Capture error:",
       error
     );
+
+    setLoading(false);
 
     showError(
       "Unable to capture the photo.\n\n" +
@@ -1688,10 +2088,6 @@ function downloadPhoto(){
 
   }
 
-
-  /*
-    Clean filename.
-  */
 
   const safeID =
     studentIDValue
@@ -1746,10 +2142,6 @@ function downloadPhoto(){
   },1000);
 
 
-  /*
-    Return to ID screen.
-  */
-
   setTimeout(()=>{
 
     resetEverything();
@@ -1783,11 +2175,14 @@ async function retakePhoto(){
 
   }
 
+
   previewImage.removeAttribute("src");
+
 
   showScreen(
     cameraScreen
   );
+
 
   await openCamera();
 
@@ -1806,6 +2201,7 @@ function resetEverything(){
 
   capturedBlob = null;
 
+
   if(capturedURL){
 
     URL.revokeObjectURL(
@@ -1815,6 +2211,7 @@ function resetEverything(){
     capturedURL = null;
 
   }
+
 
   previewImage.removeAttribute("src");
 
@@ -1859,13 +2256,6 @@ startBtn.addEventListener(
     studentIDValue =
       id;
 
-
-    /*
-      Show camera screen FIRST.
-
-      This keeps getUserMedia in direct user interaction
-      flow on mobile browsers.
-    */
 
     showScreen(
       cameraScreen
@@ -1923,9 +2313,11 @@ cameraSelect.addEventListener(
     const deviceId =
       cameraSelect.value;
 
+
     if(!deviceId){
       return;
     }
+
 
     await openSpecificCamera(
       deviceId
@@ -1989,11 +2381,6 @@ document.addEventListener(
   "visibilitychange",
   ()=>{
 
-    /*
-      If user leaves the page, stop camera.
-      When returning, the user can press retry.
-    */
-
     if(document.hidden){
 
       stopCamera();
@@ -2027,14 +2414,41 @@ if(navigator.mediaDevices){
 
 
 /* =========================================================
-   INITIAL STATE
+   INITIALIZATION
 ========================================================= */
 
 window.addEventListener(
   "load",
-  ()=>{
+  async ()=>{
 
     studentId.focus();
+
+
+    /*
+      Load AI segmentation in background.
+    */
+
+    try{
+
+      await initializeSegmentation();
+
+      console.log(
+        "White background AI ready."
+      );
+
+    }catch(error){
+
+      console.error(
+        "AI initialization failed:",
+        error
+      );
+
+      /*
+        Camera still works even if AI
+        cannot be loaded.
+      */
+
+    }
 
   }
 );
@@ -2043,4 +2457,3 @@ window.addEventListener(
 
 </body>
 </html>
-
