@@ -13,10 +13,38 @@
 
 <meta name="theme-color" content="#080b0d">
 
-<title>DJIS ID Photo Booth v9</title>
+<title>DJIS ID Photo Booth</title>
 
 
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 
+<script type="module">
+/*
+ * IMG.LY is loaded only on desktop. Android uses MediaPipe Selfie Segmentation
+ * as a mobile-safe fallback because the standalone IMG.LY ONNX/WASM stack can
+ * fail on some Android Chrome devices.
+ */
+window.loadImglyBackgroundRemoval = async function(){
+    if(window.imglyRemoveBackground){
+        return window.imglyRemoveBackground;
+    }
+
+    if(!window.imglyBackgroundRemovalLoading){
+        window.imglyBackgroundRemovalLoading = import(
+            "https://esm.sh/@imgly/background-removal@1.7.0"
+        ).then(function(module){
+            const remover = module.removeBackground || module.default;
+            if(typeof remover !== "function"){
+                throw new Error("IMG.LY removeBackground export was not found.");
+            }
+            window.imglyRemoveBackground = remover;
+            return remover;
+        });
+    }
+
+    return await window.imglyBackgroundRemovalLoading;
+};
+</script>
 
 <style>
 
@@ -590,104 +618,6 @@ body{
     color:#080b0d;
 }
 
-.ai-settings-btn{
-    min-height:42px;
-    background:#11171b;
-    color:#9aa7b0;
-    border-color:#29353c;
-    font-size:11px;
-}
-
-.ai-settings-btn:active{
-    background:#182126;
-}
-
-.ai-token-modal{
-    position:fixed;
-    inset:0;
-    z-index:1100;
-    display:none;
-    align-items:center;
-    justify-content:center;
-    padding:20px;
-    background:rgba(0,0,0,.78);
-}
-
-.ai-token-modal.show{
-    display:flex;
-}
-
-.ai-token-box{
-    width:100%;
-    max-width:380px;
-    padding:22px;
-    border:1px solid #303a40;
-    border-radius:18px;
-    background:#11171b;
-    box-shadow:0 20px 60px rgba(0,0,0,.5);
-}
-
-.ai-token-title{
-    font-size:16px;
-    font-weight:900;
-}
-
-.ai-token-text{
-    margin-top:8px;
-    color:#7f8b91;
-    font-size:11px;
-    line-height:1.55;
-}
-
-.ai-token-input{
-    width:100%;
-    height:48px;
-    margin-top:15px;
-    padding:0 13px;
-    border:1px solid #303a40;
-    border-radius:10px;
-    outline:none;
-    background:#0d1114;
-    color:#fff;
-    font-size:13px;
-}
-
-.ai-token-input:focus{
-    border-color:#38cef3;
-}
-
-.ai-token-actions{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:9px;
-    margin-top:12px;
-}
-
-.ai-token-actions button{
-    min-height:45px;
-    border-radius:10px;
-    border:1px solid #303a40;
-    background:#151b1f;
-    color:#fff;
-    font-weight:800;
-    cursor:pointer;
-}
-
-.ai-token-save{
-    background:#38cef3 !important;
-    color:#071014 !important;
-    border-color:#38cef3 !important;
-}
-
-.ai-token-link{
-    display:block;
-    margin-top:12px;
-    color:#38cef3;
-    text-align:center;
-    font-size:11px;
-    text-decoration:none;
-}
-
 /* =========================================================
    PROCESSING
    ========================================================= */
@@ -1038,14 +968,6 @@ body{
     <div class="actions">
 
         <button
-            id="aiSettingsBtn"
-            class="action-btn ai-settings-btn"
-            type="button"
-            title="Configure cloud background-removal API token">
-            ⚙ AI TOKEN SETTINGS
-        </button>
-
-        <button
             id="removeBgBtn"
             class="action-btn remove-bg-btn">
 
@@ -1098,8 +1020,6 @@ body{
 </section>
 
 </div>
-
-<!-- CLOUD AI TOKEN MODAL IS CREATED ON DEMAND BY JAVASCRIPT -->
 
 <!-- PROCESSING OVERLAY -->
 
@@ -1253,314 +1173,256 @@ let whiteBlob = null;
 
 
 /* =========================================================
-   CLOUD AI BACKGROUND REMOVAL — BRIA RMBG 2.0
+   AI BACKGROUND REMOVAL
    ========================================================= */
 
-/*
- * Bria provides a cloud RMBG 2.0 endpoint. This removes the large local
- * ONNX/WASM model from the browser, so Android phones do not spend minutes
- * downloading/loading a segmentation model.
- *
- * IMPORTANT:
- * A token entered in a static GitHub Pages site is visible to the browser.
- * For a public production kiosk, use REMOVE_BG_PROXY_URL instead and keep
- * the Bria token on your server/Cloudflare Worker.
- */
-const BRIA_REMOVE_BG_URL =
-    "https://engine.prod.bria-api.com/v2/image/edit/remove_background";
+let backgroundRemovalReady = false;
 
-const REMOVE_BG_PROXY_URL = "";
-const BRIA_TOKEN_STORAGE_KEY = "djis_bria_api_token_v1";
+/* =========================================================
+   SHOW PROCESSING
+   ========================================================= */
 
-let briaToken = "";
+function showProcessing(title, text){
 
-function getStoredBriaToken(){
-    try{
-        return (localStorage.getItem(BRIA_TOKEN_STORAGE_KEY) || "").trim();
-    }catch(error){
-        console.warn("Unable to read saved Bria API token:", error);
-        return "";
+    processingTitle.textContent =
+        title;
+
+    processingText.textContent =
+        text;
+
+    processing.classList.add("show");
+
+}
+
+
+function hideProcessing(){
+
+    processing.classList.remove("show");
+
+}
+
+
+/* =========================================================
+   BACKGROUND REMOVAL ENGINE
+   ========================================================= */
+
+let mediaPipeSegmentation = null;
+let mediaPipeSegmentationReady = false;
+
+function isAndroidDevice(){
+    return /Android/i.test(navigator.userAgent || "");
+}
+
+async function initializeMediaPipeSegmentation(){
+    if(mediaPipeSegmentationReady && mediaPipeSegmentation){
+        return mediaPipeSegmentation;
     }
-}
 
-function saveBriaToken(token){
-    try{
-        localStorage.setItem(BRIA_TOKEN_STORAGE_KEY, token.trim());
-    }catch(error){
-        console.warn("Unable to save Bria API token:", error);
+    if(typeof SelfieSegmentation === "undefined"){
+        throw new Error("Android background-removal engine could not be loaded.");
     }
-}
 
-function clearSavedBriaToken(){
-    try{
-        localStorage.removeItem(BRIA_TOKEN_STORAGE_KEY);
-    }catch(error){
-        console.warn(error);
-    }
-    briaToken = "";
-}
-
-function ensureAITokenModal(){
-    if(document.getElementById("aiTokenModal")) return;
-
-    const modal = document.createElement("div");
-    modal.id = "aiTokenModal";
-    modal.className = "ai-token-modal";
-    modal.innerHTML = `
-        <div class="ai-token-box" role="dialog" aria-modal="true" aria-labelledby="aiTokenTitle">
-            <div id="aiTokenTitle" class="ai-token-title">Cloud AI Background Removal</div>
-            <div class="ai-token-text">
-                Enter your Bria API token. Your photo is processed in the cloud,
-                so Android does not need to load a large AI model locally.
-                The token is stored only in this browser.
-            </div>
-            <input id="aiTokenInput" class="ai-token-input" type="password"
-                   autocomplete="off" spellcheck="false" placeholder="Enter Bria API token">
-            <div class="ai-token-actions">
-                <button id="aiTokenCancel" type="button">CANCEL</button>
-                <button id="aiTokenSave" class="ai-token-save" type="button">SAVE TOKEN</button>
-            </div>
-            <a class="ai-token-link" href="https://platform.bria.ai/" target="_blank" rel="noopener">
-                CREATE / MANAGE BRIA API TOKEN
-            </a>
-        </div>`;
-    document.body.appendChild(modal);
-}
-
-function openAITokenModal(){
-    ensureAITokenModal();
-    const modal = document.getElementById("aiTokenModal");
-    const input = document.getElementById("aiTokenInput");
-    if(!modal || !input) return;
-
-    input.value = getStoredBriaToken();
-    modal.classList.add("show");
-
-    setTimeout(function(){
-        input.focus();
-        input.select();
-    },50);
-}
-
-function closeAITokenModal(){
-    const modal = document.getElementById("aiTokenModal");
-    if(modal) modal.classList.remove("show");
-}
-
-function requestAIToken(){
-    return new Promise(function(resolve,reject){
-        ensureAITokenModal();
-
-        const modal = document.getElementById("aiTokenModal");
-        const input = document.getElementById("aiTokenInput");
-        const saveBtn = document.getElementById("aiTokenSave");
-        const cancelBtn = document.getElementById("aiTokenCancel");
-
-        if(!modal || !input || !saveBtn || !cancelBtn){
-            reject(new Error("AI token settings are unavailable."));
-            return;
+    mediaPipeSegmentation = new SelfieSegmentation({
+        locateFile: function(file){
+            return "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/" + file;
         }
-
-        const finish = function(token,error){
-            saveBtn.removeEventListener("click",onSave);
-            cancelBtn.removeEventListener("click",onCancel);
-            input.removeEventListener("keydown",onKey);
-            closeAITokenModal();
-            if(error) reject(error);
-            else resolve(token);
-        };
-
-        const onSave = function(){
-            const token = input.value.trim();
-            if(!token){
-                alert("Please enter your Bria API token.");
-                input.focus();
-                return;
-            }
-            saveBriaToken(token);
-            finish(token,null);
-        };
-
-        const onCancel = function(){
-            finish(null,new Error("No Bria API token was provided."));
-        };
-
-        const onKey = function(event){
-            if(event.key === "Enter") onSave();
-            if(event.key === "Escape") onCancel();
-        };
-
-        saveBtn.addEventListener("click",onSave);
-        cancelBtn.addEventListener("click",onCancel);
-        input.addEventListener("keydown",onKey);
-
-        openAITokenModal();
     });
+
+    // Model 0 is the general selfie model and is more suitable for ID portraits.
+    mediaPipeSegmentation.setOptions({
+        modelSelection: 0
+    });
+
+    mediaPipeSegmentationReady = true;
+    return mediaPipeSegmentation;
 }
 
-async function getBriaToken(){
-    let token = briaToken || getStoredBriaToken();
-
-    if(!token){
-        token = await requestAIToken();
-    }
-
-    briaToken = token;
-    return token;
-}
-
-async function prepareCloudAIInput(blob){
-    const image = await loadImageFromBlob(blob);
-
-    /* Keep enough resolution for hair/ears while avoiding huge uploads. */
-    const maxDimension = 2048;
-    const iw = image.naturalWidth || image.width;
-    const ih = image.naturalHeight || image.height;
-    const scale = Math.min(1, maxDimension / Math.max(iw,ih));
-
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1,Math.round(iw * scale));
-    canvas.height = Math.max(1,Math.round(ih * scale));
-
-    const ctx = canvas.getContext("2d",{alpha:false});
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(image,0,0,canvas.width,canvas.height);
-
-    return await canvasToDataURL(canvas,"image/jpeg",0.94);
-}
-
-function canvasToDataURL(canvas,type,quality){
-    return canvas.toDataURL(type,quality);
-}
-
-function loadImageFromBlob(blob){
-    return new Promise(function(resolve,reject){
+async function runMediaPipeBackgroundRemoval(blob){
+    const img = await new Promise(function(resolve,reject){
         const image = new Image();
         const url = URL.createObjectURL(blob);
-
-        image.onload = function(){
-            URL.revokeObjectURL(url);
-            resolve(image);
-        };
-
-        image.onerror = function(){
-            URL.revokeObjectURL(url);
-            reject(new Error("Could not load the captured photo."));
-        };
-
+        image.onload = function(){ URL.revokeObjectURL(url); resolve(image); };
+        image.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("Could not load the captured photo.")); };
         image.src = url;
     });
-}
 
-function canvasToBlob(canvas,type,quality){
-    return new Promise(function(resolve,reject){
-        canvas.toBlob(function(blob){
-            if(blob) resolve(blob);
-            else reject(new Error("Could not create the AI input image."));
-        },type,quality);
+    const maxDimension = 1280;
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    const scale = Math.min(1, maxDimension / Math.max(iw, ih));
+    const w = Math.max(1, Math.round(iw * scale));
+    const h = Math.max(1, Math.round(ih * scale));
+
+    const inputCanvas = document.createElement("canvas");
+    inputCanvas.width = w;
+    inputCanvas.height = h;
+    const ictx = inputCanvas.getContext("2d", {alpha:false});
+    ictx.imageSmoothingEnabled = true;
+    ictx.imageSmoothingQuality = "high";
+    ictx.drawImage(img, 0, 0, w, h);
+
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = w;
+    maskCanvas.height = h;
+
+    const segmentation = await initializeMediaPipeSegmentation();
+
+    const maskReady = new Promise(function(resolve,reject){
+        const previous = segmentation.onResults;
+        segmentation.onResults = function(results){
+            try{
+                if(!results || !results.segmentationMask){
+                    throw new Error("Android segmentation did not return a mask.");
+                }
+                const mctx = maskCanvas.getContext("2d");
+                mctx.clearRect(0,0,w,h);
+                mctx.drawImage(results.segmentationMask,0,0,w,h);
+                segmentation.onResults = previous;
+                resolve();
+            }catch(error){
+                segmentation.onResults = previous;
+                reject(error);
+            }
+        };
     });
-}
 
-async function fetchBlobFromURL(url){
-    const response = await fetch(url,{mode:"cors",cache:"no-store"});
-    if(!response.ok){
-        throw new Error("The AI result image could not be downloaded (HTTP " + response.status + ").");
-    }
-    return await response.blob();
-}
+    await segmentation.send({image: inputCanvas});
+    await maskReady;
 
-async function runBriaBackgroundRemoval(blob){
-    const aiInput = await prepareCloudAIInput(blob);
+    const src = ictx.getImageData(0,0,w,h);
+    const mask = maskCanvas.getContext("2d").getImageData(0,0,w,h);
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const octx = out.getContext("2d");
+    const data = new Uint8ClampedArray(src.data);
 
-    showProcessing(
-        "AI Background Removal",
-        "Sending photo to secure cloud AI..."
-    );
-
-    let response;
-
-    if(REMOVE_BG_PROXY_URL.trim()){
-        response = await fetch(REMOVE_BG_PROXY_URL.trim(),{
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({
-                image:aiInput,
-                preserve_alpha:true,
-                sync:true
-            })
-        });
-    }else{
-        const token = await getBriaToken();
-
-        response = await fetch(BRIA_REMOVE_BG_URL,{
-            method:"POST",
-            headers:{
-                "Content-Type":"application/json",
-                "api_token":token
-            },
-            body:JSON.stringify({
-                image:aiInput,
-                preserve_alpha:true,
-                sync:true
-            })
-        });
+    // Soft ID-photo edge: keep solid foreground, feather only the transition.
+    for(let i=0;i<data.length;i+=4){
+        const m = mask.data[i];
+        let a;
+        if(m <= 35) a = 0;
+        else if(m >= 215) a = 255;
+        else a = Math.round(((m-35)/180)*255);
+        data[i+3] = a;
     }
 
-    const responseText = await response.text();
-    let data = null;
+    const imageData = new ImageData(data,w,h);
+    octx.putImageData(imageData,0,0);
 
-    try{
-        data = responseText ? JSON.parse(responseText) : null;
-    }catch(error){
-        data = null;
-    }
-
-    if(!response.ok){
-        console.error("Bria background removal response:",response.status,responseText);
-
-        if(response.status === 401 || response.status === 403){
-            clearSavedBriaToken();
-            throw new Error("The Bria API token was rejected. Open AI TOKEN SETTINGS and enter a valid token.");
-        }
-
-        if(response.status === 429){
-            throw new Error("The Bria service is busy or the request limit was reached. Please try again in a moment.");
-        }
-
-        if(response.status === 415){
-            throw new Error("The photo format is not supported by the Bria background-removal service.");
-        }
-
-        const detail =
-            (data && (data.message || data.error || data.detail)) ||
-            responseText.slice(0,240);
-
-        throw new Error("Cloud AI request failed (HTTP " + response.status + "): " + detail);
-    }
-
-    /* Bria v2 synchronous requests return result.image_url. */
-    const imageURL = data && data.result && data.result.image_url;
-
-    if(!imageURL){
-        throw new Error("Cloud AI completed but did not return an output image.");
-    }
-
-    showProcessing(
-        "Downloading Cutout",
-        "Refining the AI result for the ID photo..."
-    );
-
-    return await fetchBlobFromURL(imageURL);
+    return await new Promise(function(resolve,reject){
+        out.toBlob(function(result){
+            if(result) resolve(result);
+            else reject(new Error("Could not create the Android cutout."));
+        },"image/png");
+    });
 }
 
 async function initializeBackgroundRemoval(){
-    /* No local model is downloaded. The actual request starts on demand. */
-    return true;
+    // Android deliberately uses MediaPipe. This avoids the ONNX/WASM runtime
+    // failure that is occurring on the user's Android Chrome device.
+    if(isAndroidDevice()){
+        await initializeMediaPipeSegmentation();
+        return;
+    }
+
+    if(backgroundRemovalReady && typeof window.imglyRemoveBackground === "function"){
+        return;
+    }
+
+    if(typeof window.loadImglyBackgroundRemoval !== "function"){
+        throw new Error("Desktop AI loader is unavailable.");
+    }
+
+    await window.loadImglyBackgroundRemoval();
+
+    if(typeof window.imglyRemoveBackground !== "function"){
+        throw new Error("Desktop AI background removal library failed to load.");
+    }
+
+    backgroundRemovalReady = true;
 }
 
+/* =========================================================
+   PREPARE MOBILE AI INPUT
+   ========================================================= */
+
+async function prepareAIInput(blob){
+    if(!isAndroidDevice()){
+        return blob;
+    }
+
+    const img = await new Promise(function(resolve,reject){
+        const image = new Image();
+        const url = URL.createObjectURL(blob);
+        image.onload = function(){ URL.revokeObjectURL(url); resolve(image); };
+        image.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("Could not prepare the camera image.")); };
+        image.src = url;
+    });
+
+    const maxDimension = 1280;
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    if(Math.max(iw,ih) <= maxDimension) return blob;
+
+    const scale = maxDimension / Math.max(iw,ih);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1,Math.round(iw*scale));
+    canvas.height = Math.max(1,Math.round(ih*scale));
+    const ctx = canvas.getContext("2d",{alpha:false});
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+
+    return await new Promise(function(resolve,reject){
+        canvas.toBlob(function(result){
+            if(result) resolve(result);
+            else reject(new Error("Could not create mobile AI input."));
+        },"image/jpeg",0.94);
+    });
+}
+
+/* =========================================================
+   RUN BACKGROUND REMOVAL
+   ========================================================= */
+
 async function runBackgroundRemoval(blob){
-    return await runBriaBackgroundRemoval(blob);
+    if(isAndroidDevice()){
+        return await runMediaPipeBackgroundRemoval(blob);
+    }
+
+    await initializeBackgroundRemoval();
+    const aiInput = await prepareAIInput(blob);
+
+    const baseConfig = {
+        debug:true,
+        proxyToWorker:false,
+        output:{
+            format:"image/png",
+            type:"foreground"
+        }
+    };
+
+    const attempts = [
+        {model:"isnet", device:"cpu"},
+        {model:"isnet_fp16", device:"cpu"}
+    ];
+
+    let lastError = null;
+    for(const attempt of attempts){
+        try{
+            console.log("Desktop background removal attempt:",attempt.model,attempt.device);
+            return await window.imglyRemoveBackground(
+                aiInput,
+                Object.assign({},baseConfig,attempt)
+            );
+        }catch(error){
+            lastError = error;
+            console.error("Desktop background removal attempt failed:",attempt,error);
+        }
+    }
+
+    throw lastError || new Error("All desktop background-removal attempts failed.");
 }
 
 /* =========================================================
@@ -1960,144 +1822,157 @@ async function capturePhoto(){
 
     try{
 
-        if(!video.videoWidth || !video.videoHeight){
-            alert("Camera is not ready yet.");
+        if(
+            !video.videoWidth ||
+            !video.videoHeight
+        ){
+
+            alert(
+                "Camera is not ready yet."
+            );
+
             return;
+
         }
 
         captureBtn.disabled = true;
-        const originalButtonHTML = captureBtn.innerHTML;
-        captureBtn.innerHTML = '<span style="font-size:20px;">⏳</span>';
+
+        const originalButtonHTML =
+            captureBtn.innerHTML;
+
+        captureBtn.innerHTML =
+            '<span style="font-size:20px;">⏳</span>';
+
+        showProcessing(
+            "Capturing Photo",
+            "Preparing the high-resolution image..."
+        );
 
         /*
-         * V9 Android optimization:
-         * Prefer the camera's native still-photo pipeline when available.
-         * Android Chrome can return a JPEG directly from ImageCapture,
-         * avoiding a large full-resolution PNG encode on the main thread.
-         * The canvas/JPEG path remains as the fallback for other browsers.
+         * IMPORTANT:
+         * Keep the camera's full resolution for AI background removal.
+         * The previous version first reduced the image to 350×450,
+         * which made the AI edge mask visibly pixelated.
          */
-        let sourceBlob = null;
-        let sourceCanvas = null;
+        const fullCanvas =
+            createFullVideoCanvas();
 
-        const track = stream && stream.getVideoTracks
-            ? stream.getVideoTracks()[0]
-            : null;
+        fullResolutionBlob =
+            await canvasToBlob(
+                fullCanvas,
+                "image/png"
+            );
 
-        const isAndroid = /Android/i.test(navigator.userAgent);
+        /*
+         * Create the normal 350×450 ID-photo preview.
+         * This is only the display/export size; AI uses fullResolutionBlob.
+         */
+        const finalCanvas =
+            cropToIDPhoto(fullCanvas);
 
-        if(isAndroid && track && "ImageCapture" in window){
-            try{
-                const imageCapture = new ImageCapture(track);
-                sourceBlob = await imageCapture.takePhoto();
-            }catch(nativeCaptureError){
-                console.warn("Native Android photo capture failed; using canvas fallback.", nativeCaptureError);
-                sourceBlob = null;
-            }
-        }
+        const previewBlob =
+            await canvasToBlob(
+                finalCanvas,
+                "image/png"
+            );
 
-        if(!sourceBlob){
-            /* Fallback: JPEG instead of PNG to greatly reduce encode time/file size. */
-            sourceCanvas = createFullVideoCanvas();
-            sourceBlob = await canvasToBlob(
-                sourceCanvas,
-                "image/jpeg",
-                0.92
+        if(!previewBlob){
+            throw new Error(
+                "Unable to create photo."
             );
         }
 
-        if(!sourceBlob){
-            throw new Error("Unable to create the captured photo.");
-        }
+        originalBlob =
+            previewBlob;
 
-        /*
-         * Keep the high-quality JPEG for cloud background removal.
-         * Do not convert it to PNG here — that was the main source of
-         * the long Android freeze in v8.
-         */
-        fullResolutionBlob = sourceBlob;
-
-        /*
-         * Build only the small 350×450 preview for the UI.
-         * This conversion is tiny compared with the old full-resolution PNG.
-         */
-        const sourceImage = await loadImageFromBlob(sourceBlob);
-        const previewSourceCanvas = document.createElement("canvas");
-        previewSourceCanvas.width = sourceImage.naturalWidth || sourceImage.width;
-        previewSourceCanvas.height = sourceImage.naturalHeight || sourceImage.height;
-
-        const previewSourceCtx = previewSourceCanvas.getContext("2d");
-        previewSourceCtx.imageSmoothingEnabled = true;
-        previewSourceCtx.imageSmoothingQuality = "high";
-
-        /* Native ImageCapture photos are not mirrored like the live preview. */
-        if(currentFacing === "user"){
-            previewSourceCtx.translate(previewSourceCanvas.width,0);
-            previewSourceCtx.scale(-1,1);
-        }
-
-        previewSourceCtx.drawImage(
-            sourceImage,
-            0,
-            0,
-            previewSourceCanvas.width,
-            previewSourceCanvas.height
-        );
-
-        const finalCanvas = cropToIDPhoto(previewSourceCanvas);
-        const previewBlob = await canvasToBlob(
-            finalCanvas,
-            "image/png"
-        );
-
-        if(!previewBlob){
-            throw new Error("Unable to create photo preview.");
-        }
-
-        originalBlob = previewBlob;
-        capturedBlob = previewBlob;
+        capturedBlob =
+            previewBlob;
 
         if(capturedURL){
-            URL.revokeObjectURL(capturedURL);
+            URL.revokeObjectURL(
+                capturedURL
+            );
         }
 
-        capturedURL = URL.createObjectURL(previewBlob);
-        previewImage.src = capturedURL;
+        capturedURL =
+            URL.createObjectURL(
+                previewBlob
+            );
 
-        transparentBlob = null;
-        whiteBlob = null;
+        previewImage.src =
+            capturedURL;
 
-        photoWrapper.classList.remove("transparent");
-        previewStatus.textContent = "ORIGINAL PHOTO";
+        transparentBlob =
+            null;
 
-        removeBgBtn.style.display = "block";
-        removeBgBtn.disabled = false;
-        removeBgBtn.textContent = "✨ REMOVE BACKGROUND";
+        whiteBlob =
+            null;
 
-        whiteBgBtn.style.display = "none";
-        backgroundOptions.style.display = "none";
-        uploadPortalBtn.style.display = "block";
+        photoWrapper.classList.remove(
+            "transparent"
+        );
 
-        cameraScreen.classList.add("hidden");
-        previewScreen.classList.remove("hidden");
+        previewStatus.textContent =
+            "ORIGINAL PHOTO";
+
+        removeBgBtn.style.display =
+            "block";
+
+        removeBgBtn.disabled =
+            false;
+
+        removeBgBtn.textContent =
+            "✨ REMOVE BACKGROUND";
+
+        whiteBgBtn.style.display =
+            "none";
+
+        backgroundOptions.style.display =
+            "none";
+
+        uploadPortalBtn.style.display =
+            "block";
+
+        cameraScreen.classList.add(
+            "hidden"
+        );
+
+        previewScreen.classList.remove(
+            "hidden"
+        );
 
         stopCamera();
 
-        captureBtn.disabled = false;
-        captureBtn.innerHTML = originalButtonHTML;
+        captureBtn.disabled =
+            false;
+
+        captureBtn.innerHTML =
+            originalButtonHTML;
+
         hideProcessing();
 
     }catch(error){
 
-        console.error("Capture error:",error);
+        console.error(
+            "Capture error:",
+            error
+        );
+
         hideProcessing();
 
-        alert("Unable to capture photo.");
+        alert(
+            "Unable to capture photo."
+        );
 
-        captureBtn.disabled = false;
-        captureBtn.innerHTML = '<span style="font-size:16px;">📸</span>';
+        captureBtn.disabled =
+            false;
+
+        captureBtn.innerHTML =
+            '<span style="font-size:16px;">📸</span>';
+
     }
-}
 
+}
 
 /* =========================================================
    REMOVE BACKGROUND - HIGH QUALITY AI
@@ -2122,7 +1997,7 @@ async function removeBackground(){
 
         showProcessing(
             "Removing Background",
-            "Cloud AI is preparing your photo..."
+            isAndroidDevice() ? "Mobile-safe background removal is starting..." : "AI is preparing a high-resolution cutout..."
         );
 
         await initializeBackgroundRemoval();
@@ -2137,7 +2012,7 @@ async function removeBackground(){
 
         showProcessing(
             "Removing Background",
-            "AI is separating the person from the background..."
+            isAndroidDevice() ? "Android is separating the person from the background..." : "AI is separating the person from the background..."
         );
 
         const aiBlob =
@@ -2194,7 +2069,7 @@ async function removeBackground(){
         );
 
         previewStatus.textContent =
-            "BACKGROUND REMOVED • BRIA CLOUD AI";
+            "BACKGROUND REMOVED • AI";
 
         backgroundOptions.style.display =
             "grid";
@@ -2229,8 +2104,8 @@ async function removeBackground(){
 
         let message =
             "Unable to remove the background.\n\n" +
-            (error && error.message ? error.message : "The cloud AI service could not process the photo.") +
-            "\n\nOpen AI TOKEN SETTINGS to update the Bria token if necessary.";
+            "The AI model could not start on this device.\n" +
+            "Please check your internet connection and try again.";
 
         /* Keep the normal message clean, but expose a short diagnostic in
            the console so the exact failure can be identified if needed. */
@@ -3208,18 +3083,6 @@ startBtn.addEventListener(
 
 
 /* =========================================================
-   AI TOKEN SETTINGS
-   ========================================================= */
-
-const aiSettingsBtn = document.getElementById("aiSettingsBtn");
-
-if(aiSettingsBtn){
-    aiSettingsBtn.addEventListener("click",function(){
-        openAITokenModal();
-    });
-}
-
-/* =========================================================
    BUTTON EVENTS
    ========================================================= */
 
@@ -3315,7 +3178,19 @@ document.addEventListener(
 window.addEventListener(
     "load",
     function(){
-        /* The cloud AI client is loaded on demand when Remove Background is pressed. */
+
+        initializeSegmentation()
+            .catch(
+                function(error){
+
+                    console.warn(
+                        "AI initialization:",
+                        error
+                    );
+
+                }
+            );
+
     }
 );
 
