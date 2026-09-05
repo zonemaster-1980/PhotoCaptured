@@ -16,11 +16,13 @@
 <title>DJIS ID Photo Booth</title>
 
 
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+
 <script type="module">
 /*
- * IMG.LY is loaded only when background removal is actually requested.
- * This is important on Android: loading the ONNX/WASM runtime during page
- * startup can consume memory before the camera has even finished.
+ * IMG.LY is loaded only on desktop. Android uses MediaPipe Selfie Segmentation
+ * as a mobile-safe fallback because the standalone IMG.LY ONNX/WASM stack can
+ * fail on some Android Chrome devices.
  */
 window.loadImglyBackgroundRemoval = async function(){
     if(window.imglyRemoveBackground){
@@ -1179,43 +1181,155 @@ function hideProcessing(){
 
 
 /* =========================================================
-   INITIALIZE AI BACKGROUND REMOVAL
+   BACKGROUND REMOVAL ENGINE
    ========================================================= */
 
+let mediaPipeSegmentation = null;
+let mediaPipeSegmentationReady = false;
+
+function isAndroidDevice(){
+    return /Android/i.test(navigator.userAgent || "");
+}
+
+async function initializeMediaPipeSegmentation(){
+    if(mediaPipeSegmentationReady && mediaPipeSegmentation){
+        return mediaPipeSegmentation;
+    }
+
+    if(typeof SelfieSegmentation === "undefined"){
+        throw new Error("Android background-removal engine could not be loaded.");
+    }
+
+    mediaPipeSegmentation = new SelfieSegmentation({
+        locateFile: function(file){
+            return "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/" + file;
+        }
+    });
+
+    // Model 0 is the general selfie model and is more suitable for ID portraits.
+    mediaPipeSegmentation.setOptions({
+        modelSelection: 0
+    });
+
+    mediaPipeSegmentationReady = true;
+    return mediaPipeSegmentation;
+}
+
+async function runMediaPipeBackgroundRemoval(blob){
+    const img = await new Promise(function(resolve,reject){
+        const image = new Image();
+        const url = URL.createObjectURL(blob);
+        image.onload = function(){ URL.revokeObjectURL(url); resolve(image); };
+        image.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("Could not load the captured photo.")); };
+        image.src = url;
+    });
+
+    const maxDimension = 1280;
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    const scale = Math.min(1, maxDimension / Math.max(iw, ih));
+    const w = Math.max(1, Math.round(iw * scale));
+    const h = Math.max(1, Math.round(ih * scale));
+
+    const inputCanvas = document.createElement("canvas");
+    inputCanvas.width = w;
+    inputCanvas.height = h;
+    const ictx = inputCanvas.getContext("2d", {alpha:false});
+    ictx.imageSmoothingEnabled = true;
+    ictx.imageSmoothingQuality = "high";
+    ictx.drawImage(img, 0, 0, w, h);
+
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = w;
+    maskCanvas.height = h;
+
+    const segmentation = await initializeMediaPipeSegmentation();
+
+    const maskReady = new Promise(function(resolve,reject){
+        const previous = segmentation.onResults;
+        segmentation.onResults = function(results){
+            try{
+                if(!results || !results.segmentationMask){
+                    throw new Error("Android segmentation did not return a mask.");
+                }
+                const mctx = maskCanvas.getContext("2d");
+                mctx.clearRect(0,0,w,h);
+                mctx.drawImage(results.segmentationMask,0,0,w,h);
+                segmentation.onResults = previous;
+                resolve();
+            }catch(error){
+                segmentation.onResults = previous;
+                reject(error);
+            }
+        };
+    });
+
+    await segmentation.send({image: inputCanvas});
+    await maskReady;
+
+    const src = ictx.getImageData(0,0,w,h);
+    const mask = maskCanvas.getContext("2d").getImageData(0,0,w,h);
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const octx = out.getContext("2d");
+    const data = new Uint8ClampedArray(src.data);
+
+    // Soft ID-photo edge: keep solid foreground, feather only the transition.
+    for(let i=0;i<data.length;i+=4){
+        const m = mask.data[i];
+        let a;
+        if(m <= 35) a = 0;
+        else if(m >= 215) a = 255;
+        else a = Math.round(((m-35)/180)*255);
+        data[i+3] = a;
+    }
+
+    const imageData = new ImageData(data,w,h);
+    octx.putImageData(imageData,0,0);
+
+    return await new Promise(function(resolve,reject){
+        out.toBlob(function(result){
+            if(result) resolve(result);
+            else reject(new Error("Could not create the Android cutout."));
+        },"image/png");
+    });
+}
+
 async function initializeBackgroundRemoval(){
+    // Android deliberately uses MediaPipe. This avoids the ONNX/WASM runtime
+    // failure that is occurring on the user's Android Chrome device.
+    if(isAndroidDevice()){
+        await initializeMediaPipeSegmentation();
+        return;
+    }
+
     if(backgroundRemovalReady && typeof window.imglyRemoveBackground === "function"){
         return;
     }
 
     if(typeof window.loadImglyBackgroundRemoval !== "function"){
-        throw new Error("AI loader is unavailable.");
+        throw new Error("Desktop AI loader is unavailable.");
     }
 
     await window.loadImglyBackgroundRemoval();
 
     if(typeof window.imglyRemoveBackground !== "function"){
-        throw new Error("AI background removal library failed to load.");
+        throw new Error("Desktop AI background removal library failed to load.");
     }
 
     backgroundRemovalReady = true;
 }
 
 /* =========================================================
-   PREPARE A MOBILE-SAFE AI INPUT
+   PREPARE MOBILE AI INPUT
    ========================================================= */
 
 async function prepareAIInput(blob){
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
-    if(!isMobile){
+    if(!isAndroidDevice()){
         return blob;
     }
 
-    /*
-     * Modern phone cameras can produce 12MP+ frames. Feeding that directly
-     * into ONNX together with the model can exceed Android memory limits.
-     * 1280px is more than enough for a 350x450 ID-photo output and greatly
-     * reduces mobile failures.
-     */
     const img = await new Promise(function(resolve,reject){
         const image = new Image();
         const url = URL.createObjectURL(blob);
@@ -1225,42 +1339,39 @@ async function prepareAIInput(blob){
     });
 
     const maxDimension = 1280;
-    if(Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height) <= maxDimension){
-        return blob;
-    }
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    if(Math.max(iw,ih) <= maxDimension) return blob;
 
-    const scale = maxDimension / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height);
+    const scale = maxDimension / Math.max(iw,ih);
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
-    canvas.height = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
-    const ctx = canvas.getContext("2d", {alpha:false});
+    canvas.width = Math.max(1,Math.round(iw*scale));
+    canvas.height = Math.max(1,Math.round(ih*scale));
+    const ctx = canvas.getContext("2d",{alpha:false});
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
 
     return await new Promise(function(resolve,reject){
         canvas.toBlob(function(result){
             if(result) resolve(result);
             else reject(new Error("Could not create mobile AI input."));
-        }, "image/jpeg", 0.94);
+        },"image/jpeg",0.94);
     });
 }
 
 /* =========================================================
-   RUN AI BACKGROUND REMOVAL
+   RUN BACKGROUND REMOVAL
    ========================================================= */
 
 async function runBackgroundRemoval(blob){
-    await initializeBackgroundRemoval();
+    if(isAndroidDevice()){
+        return await runMediaPipeBackgroundRemoval(blob);
+    }
 
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    await initializeBackgroundRemoval();
     const aiInput = await prepareAIInput(blob);
 
-    /*
-     * Do NOT force a custom publicPath here. IMG.LY's 1.7.0 browser package
-     * has a built-in production asset path. A wrong path causes the exact
-     * generic "Unable to remove the background" failure shown by the app.
-     */
     const baseConfig = {
         debug:true,
         proxyToWorker:false,
@@ -1270,37 +1381,26 @@ async function runBackgroundRemoval(blob){
         }
     };
 
-    /*
-     * Android: start with the quantized ~40MB model. This is deliberately
-     * chosen over FP16/full precision because mobile RAM is the current
-     * failure point. Desktop can use the higher-quality model.
-     */
-    const attempts = isMobile
-        ? [
-            {model:"isnet_quint8", device:"cpu"},
-            {model:"isnet_fp16", device:"cpu"}
-          ]
-        : [
-            {model:"isnet", device:"cpu"},
-            {model:"isnet_fp16", device:"cpu"}
-          ];
+    const attempts = [
+        {model:"isnet", device:"cpu"},
+        {model:"isnet_fp16", device:"cpu"}
+    ];
 
     let lastError = null;
-
     for(const attempt of attempts){
         try{
-            console.log("Background removal attempt:", attempt.model, attempt.device);
+            console.log("Desktop background removal attempt:",attempt.model,attempt.device);
             return await window.imglyRemoveBackground(
                 aiInput,
-                Object.assign({}, baseConfig, attempt)
+                Object.assign({},baseConfig,attempt)
             );
         }catch(error){
             lastError = error;
-            console.error("Background removal attempt failed:", attempt, error);
+            console.error("Desktop background removal attempt failed:",attempt,error);
         }
     }
 
-    throw lastError || new Error("All background-removal attempts failed.");
+    throw lastError || new Error("All desktop background-removal attempts failed.");
 }
 
 /* =========================================================
@@ -1875,7 +1975,7 @@ async function removeBackground(){
 
         showProcessing(
             "Removing Background",
-            "AI is preparing a high-resolution cutout..."
+            isAndroidDevice() ? "Mobile-safe background removal is starting..." : "AI is preparing a high-resolution cutout..."
         );
 
         await initializeBackgroundRemoval();
@@ -1890,7 +1990,7 @@ async function removeBackground(){
 
         showProcessing(
             "Removing Background",
-            "AI is separating the person from the background..."
+            isAndroidDevice() ? "Android is separating the person from the background..." : "AI is separating the person from the background..."
         );
 
         const aiBlob =
