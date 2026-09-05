@@ -17,22 +17,31 @@
 
 
 <script type="module">
-/* High-quality in-browser AI background removal.
-   The model runs locally in the browser after its model/WASM assets
-   are downloaded and cached. */
-window.imglyBackgroundRemovalReady = import(
-    "https://esm.sh/@imgly/background-removal@1.7.0"
-).then(function(module){
-    const remover = module.removeBackground || module.default;
-    if(typeof remover !== "function") {
-        throw new Error("IMG.LY background-removal function was not exported.");
+/*
+ * IMG.LY is loaded only when background removal is actually requested.
+ * This is important on Android: loading the ONNX/WASM runtime during page
+ * startup can consume memory before the camera has even finished.
+ */
+window.loadImglyBackgroundRemoval = async function(){
+    if(window.imglyRemoveBackground){
+        return window.imglyRemoveBackground;
     }
-    window.imglyRemoveBackground = remover;
-    return remover;
-}).catch(function(error){
-    console.error("IMG.LY library load failed:", error);
-    throw error;
-});
+
+    if(!window.imglyBackgroundRemovalLoading){
+        window.imglyBackgroundRemovalLoading = import(
+            "https://esm.sh/@imgly/background-removal@1.7.0"
+        ).then(function(module){
+            const remover = module.removeBackground || module.default;
+            if(typeof remover !== "function"){
+                throw new Error("IMG.LY removeBackground export was not found.");
+            }
+            window.imglyRemoveBackground = remover;
+            return remover;
+        });
+    }
+
+    return await window.imglyBackgroundRemovalLoading;
+};
 </script>
 
 <style>
@@ -1174,13 +1183,15 @@ function hideProcessing(){
    ========================================================= */
 
 async function initializeBackgroundRemoval(){
-    if(backgroundRemovalReady){
+    if(backgroundRemovalReady && typeof window.imglyRemoveBackground === "function"){
         return;
     }
 
-    if(window.imglyBackgroundRemovalReady){
-        await window.imglyBackgroundRemovalReady;
+    if(typeof window.loadImglyBackgroundRemoval !== "function"){
+        throw new Error("AI loader is unavailable.");
     }
+
+    await window.loadImglyBackgroundRemoval();
 
     if(typeof window.imglyRemoveBackground !== "function"){
         throw new Error("AI background removal library failed to load.");
@@ -1190,28 +1201,69 @@ async function initializeBackgroundRemoval(){
 }
 
 /* =========================================================
+   PREPARE A MOBILE-SAFE AI INPUT
+   ========================================================= */
+
+async function prepareAIInput(blob){
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    if(!isMobile){
+        return blob;
+    }
+
+    /*
+     * Modern phone cameras can produce 12MP+ frames. Feeding that directly
+     * into ONNX together with the model can exceed Android memory limits.
+     * 1280px is more than enough for a 350x450 ID-photo output and greatly
+     * reduces mobile failures.
+     */
+    const img = await new Promise(function(resolve,reject){
+        const image = new Image();
+        const url = URL.createObjectURL(blob);
+        image.onload = function(){ URL.revokeObjectURL(url); resolve(image); };
+        image.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("Could not prepare the camera image.")); };
+        image.src = url;
+    });
+
+    const maxDimension = 1280;
+    if(Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height) <= maxDimension){
+        return blob;
+    }
+
+    const scale = maxDimension / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+    canvas.height = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+    const ctx = canvas.getContext("2d", {alpha:false});
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    return await new Promise(function(resolve,reject){
+        canvas.toBlob(function(result){
+            if(result) resolve(result);
+            else reject(new Error("Could not create mobile AI input."));
+        }, "image/jpeg", 0.94);
+    });
+}
+
+/* =========================================================
    RUN AI BACKGROUND REMOVAL
    ========================================================= */
 
 async function runBackgroundRemoval(blob){
     await initializeBackgroundRemoval();
 
-    const isMobile =
-        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    const aiInput = await prepareAIInput(blob);
 
-    const hasWebGPU =
-        typeof navigator !== "undefined" &&
-        "gpu" in navigator;
-
+    /*
+     * Do NOT force a custom publicPath here. IMG.LY's 1.7.0 browser package
+     * has a built-in production asset path. A wrong path causes the exact
+     * generic "Unable to remove the background" failure shown by the app.
+     */
     const baseConfig = {
-        /*
-         * Explicitly point to the official IMG.LY asset CDN. This avoids
-         * relying on a rewritten/default asset path on GitHub Pages.
-         */
-        publicPath:
-            "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/",
+        debug:true,
         proxyToWorker:false,
-        fetchArgs:{ mode:"cors" },
         output:{
             format:"image/png",
             type:"foreground"
@@ -1219,20 +1271,17 @@ async function runBackgroundRemoval(blob){
     };
 
     /*
-     * Mobile browsers can expose WebGPU but still fail to create a stable
-     * ONNX WebGPU session. Try the highest-quality route first on desktop,
-     * then retry with the smaller FP16 CPU-safe route if the first attempt
-     * fails. On mobile, start with FP16/CPU for reliability and fall back
-     * to full precision if the device can handle it.
+     * Android: start with the quantized ~40MB model. This is deliberately
+     * chosen over FP16/full precision because mobile RAM is the current
+     * failure point. Desktop can use the higher-quality model.
      */
     const attempts = isMobile
         ? [
-            {model:"isnet_fp16", device:"cpu"},
-            {model:"isnet", device:"cpu"},
-            ...(hasWebGPU ? [{model:"isnet_fp16", device:"gpu"}] : [])
+            {model:"isnet_quint8", device:"cpu"},
+            {model:"isnet_fp16", device:"cpu"}
           ]
         : [
-            {model:"isnet", device:hasWebGPU ? "gpu" : "cpu"},
+            {model:"isnet", device:"cpu"},
             {model:"isnet_fp16", device:"cpu"}
           ];
 
@@ -1240,28 +1289,18 @@ async function runBackgroundRemoval(blob){
 
     for(const attempt of attempts){
         try{
-            console.log(
-                "Background removal attempt:",
-                attempt.model,
-                attempt.device
-            );
-
+            console.log("Background removal attempt:", attempt.model, attempt.device);
             return await window.imglyRemoveBackground(
-                blob,
+                aiInput,
                 Object.assign({}, baseConfig, attempt)
             );
         }catch(error){
             lastError = error;
-            console.warn(
-                "Background removal attempt failed:",
-                attempt,
-                error
-            );
+            console.error("Background removal attempt failed:", attempt, error);
         }
     }
 
-    throw lastError ||
-        new Error("All background-removal attempts failed.");
+    throw lastError || new Error("All background-removal attempts failed.");
 }
 
 /* =========================================================
@@ -1943,8 +1982,14 @@ async function removeBackground(){
 
         let message =
             "Unable to remove the background.\n\n" +
-            "Please make sure you have an internet connection " +
-            "and try again.";
+            "The AI model could not start on this device.\n" +
+            "Please check your internet connection and try again.";
+
+        /* Keep the normal message clean, but expose a short diagnostic in
+           the console so the exact failure can be identified if needed. */
+        if(error && error.message){
+            console.error("BACKGROUND REMOVAL DIAGNOSTIC:", error.message);
+        }
 
         if(
             error &&
