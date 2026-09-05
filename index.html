@@ -16,20 +16,7 @@
 <title>DJIS ID Photo Booth</title>
 
 
-<script type="module">
-/*
- * Cloud background removal using Hugging Face Inference Providers.
- * The model runs remotely, so Android phones do not need to download or
- * execute a large ONNX/WASM model locally. The user supplies their own
- * Hugging Face token; it is kept only in this browser's localStorage.
- */
-window.hfInferenceReady = import(
-    "https://cdn.jsdelivr.net/npm/@huggingface/inference@4.13.28/+esm"
-).then(function(module){
-    window.HFInferenceClient = module.InferenceClient;
-    return module.InferenceClient;
-});
-</script>
+
 
 <style>
 
@@ -1053,7 +1040,8 @@ body{
         <button
             id="aiSettingsBtn"
             class="action-btn ai-settings-btn"
-            type="button">
+            type="button"
+            title="Configure cloud background-removal API token">
             ⚙ AI TOKEN SETTINGS
         </button>
 
@@ -1110,6 +1098,8 @@ body{
 </section>
 
 </div>
+
+<!-- CLOUD AI TOKEN MODAL IS CREATED ON DEMAND BY JAVASCRIPT -->
 
 <!-- PROCESSING OVERLAY -->
 
@@ -1263,38 +1253,87 @@ let whiteBlob = null;
 
 
 /* =========================================================
-   CLOUD AI BACKGROUND REMOVAL
+   CLOUD AI BACKGROUND REMOVAL — BRIA RMBG 2.0
    ========================================================= */
 
-const HF_MODEL = "briaai/RMBG-2.0";
-const HF_PROVIDER = "fal-ai";
-const HF_TOKEN_STORAGE_KEY = "djis_hf_inference_token_v1";
+/*
+ * Bria provides a cloud RMBG 2.0 endpoint. This removes the large local
+ * ONNX/WASM model from the browser, so Android phones do not spend minutes
+ * downloading/loading a segmentation model.
+ *
+ * IMPORTANT:
+ * A token entered in a static GitHub Pages site is visible to the browser.
+ * For a public production kiosk, use REMOVE_BG_PROXY_URL instead and keep
+ * the Bria token on your server/Cloudflare Worker.
+ */
+const BRIA_REMOVE_BG_URL =
+    "https://engine.prod.bria-api.com/v2/image/edit/remove_background";
 
-let hfClient = null;
+const REMOVE_BG_PROXY_URL = "";
+const BRIA_TOKEN_STORAGE_KEY = "djis_bria_api_token_v1";
 
-function getStoredHFToken(){
+let briaToken = "";
+
+function getStoredBriaToken(){
     try{
-        return (localStorage.getItem(HF_TOKEN_STORAGE_KEY) || "").trim();
+        return (localStorage.getItem(BRIA_TOKEN_STORAGE_KEY) || "").trim();
     }catch(error){
-        console.warn("Unable to read saved Hugging Face token:", error);
+        console.warn("Unable to read saved Bria API token:", error);
         return "";
     }
 }
 
-function saveHFToken(token){
+function saveBriaToken(token){
     try{
-        localStorage.setItem(HF_TOKEN_STORAGE_KEY, token.trim());
+        localStorage.setItem(BRIA_TOKEN_STORAGE_KEY, token.trim());
     }catch(error){
-        console.warn("Unable to save Hugging Face token:", error);
+        console.warn("Unable to save Bria API token:", error);
     }
 }
 
+function clearSavedBriaToken(){
+    try{
+        localStorage.removeItem(BRIA_TOKEN_STORAGE_KEY);
+    }catch(error){
+        console.warn(error);
+    }
+    briaToken = "";
+}
+
+function ensureAITokenModal(){
+    if(document.getElementById("aiTokenModal")) return;
+
+    const modal = document.createElement("div");
+    modal.id = "aiTokenModal";
+    modal.className = "ai-token-modal";
+    modal.innerHTML = `
+        <div class="ai-token-box" role="dialog" aria-modal="true" aria-labelledby="aiTokenTitle">
+            <div id="aiTokenTitle" class="ai-token-title">Cloud AI Background Removal</div>
+            <div class="ai-token-text">
+                Enter your Bria API token. Your photo is processed in the cloud,
+                so Android does not need to load a large AI model locally.
+                The token is stored only in this browser.
+            </div>
+            <input id="aiTokenInput" class="ai-token-input" type="password"
+                   autocomplete="off" spellcheck="false" placeholder="Enter Bria API token">
+            <div class="ai-token-actions">
+                <button id="aiTokenCancel" type="button">CANCEL</button>
+                <button id="aiTokenSave" class="ai-token-save" type="button">SAVE TOKEN</button>
+            </div>
+            <a class="ai-token-link" href="https://platform.bria.ai/" target="_blank" rel="noopener">
+                CREATE / MANAGE BRIA API TOKEN
+            </a>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
 function openAITokenModal(){
+    ensureAITokenModal();
     const modal = document.getElementById("aiTokenModal");
     const input = document.getElementById("aiTokenInput");
     if(!modal || !input) return;
 
-    input.value = getStoredHFToken();
+    input.value = getStoredBriaToken();
     modal.classList.add("show");
 
     setTimeout(function(){
@@ -1310,6 +1349,8 @@ function closeAITokenModal(){
 
 function requestAIToken(){
     return new Promise(function(resolve,reject){
+        ensureAITokenModal();
+
         const modal = document.getElementById("aiTokenModal");
         const input = document.getElementById("aiTokenInput");
         const saveBtn = document.getElementById("aiTokenSave");
@@ -1331,17 +1372,17 @@ function requestAIToken(){
 
         const onSave = function(){
             const token = input.value.trim();
-            if(!token || !token.startsWith("hf_")){
-                alert("Please enter a valid Hugging Face token starting with hf_.");
+            if(!token){
+                alert("Please enter your Bria API token.");
                 input.focus();
                 return;
             }
-            saveHFToken(token);
+            saveBriaToken(token);
             finish(token,null);
         };
 
         const onCancel = function(){
-            finish(null,new Error("No Hugging Face access token was provided."));
+            finish(null,new Error("No Bria API token was provided."));
         };
 
         const onKey = function(event){
@@ -1357,127 +1398,22 @@ function requestAIToken(){
     });
 }
 
-async function getHFClient(){
-    let token = getStoredHFToken();
+async function getBriaToken(){
+    let token = briaToken || getStoredBriaToken();
 
     if(!token){
         token = await requestAIToken();
     }
 
-    if(!window.HFInferenceClient){
-        await window.hfInferenceReady;
-    }
-
-    if(!window.HFInferenceClient){
-        throw new Error("Hugging Face browser client could not be loaded.");
-    }
-
-    if(!hfClient){
-        hfClient = new window.HFInferenceClient(token);
-    }
-
-    return hfClient;
-}
-
-function clearSavedHFToken(){
-    try{
-        localStorage.removeItem(HF_TOKEN_STORAGE_KEY);
-    }catch(error){
-        console.warn(error);
-    }
-    hfClient = null;
-}
-
-/*
- * The cloud model returns a black/white mask. Convert that mask plus the
- * original photograph into a transparent PNG. This keeps the original RGB
- * pixels and uses the AI mask only for alpha, which avoids the gray/white
- * halo introduced by using an already-background-removed image as input.
- */
-async function runCloudBackgroundRemoval(blob){
-
-    const client = await getHFClient();
-
-    const aiInput = await prepareCloudAIInput(blob);
-
-    showProcessing(
-        "AI Background Removal",
-        "Uploading photo securely for background removal..."
-    );
-
-    let result;
-
-    try{
-        result = await client.imageSegmentation({
-            data: aiInput,
-            model: HF_MODEL,
-            provider: HF_PROVIDER
-        });
-    }catch(error){
-        console.error("Hugging Face background removal error:", error);
-
-        const text = String(error && error.message || error || "");
-
-        if(/401|403|unauthorized|forbidden|token|authentication/i.test(text)){
-            clearSavedHFToken();
-            throw new Error(
-                "The Hugging Face token was rejected. Please enter a valid token with Inference Providers permission."
-            );
-        }
-
-        if(/402|credit|payment|billing|quota/i.test(text)){
-            throw new Error(
-                "The free Hugging Face inference credit has been exhausted."
-            );
-        }
-
-        throw new Error(
-            "Cloud AI request failed: " + text.slice(0,240)
-        );
-    }
-
-    /* Some provider adapters may return the finished image directly. */
-    if(result instanceof Blob){
-        return result;
-    }
-
-    if(result && result.image instanceof Blob){
-        return result.image;
-    }
-
-    if(!Array.isArray(result) || !result.length){
-        throw new Error("Cloud AI returned no segmentation mask.");
-    }
-
-    /*
-     * RMBG-2.0 through the Hugging Face image-segmentation interface returns
-     * a foreground segmentation mask. Use the highest-confidence segment.
-     */
-    result.sort(function(a,b){
-        return (Number(b && b.score) || 0) - (Number(a && a.score) || 0);
-    });
-
-    const best = result[0];
-    if(!best || !best.mask){
-        throw new Error("Cloud AI returned an invalid mask.");
-    }
-
-    showProcessing(
-        "Building Cutout",
-        "Applying the AI mask and refining the edges..."
-    );
-
-    return await composeTransparentFromMask(
-        aiInput,
-        best.mask
-    );
+    briaToken = token;
+    return token;
 }
 
 async function prepareCloudAIInput(blob){
     const image = await loadImageFromBlob(blob);
 
-    /* 1536px is a good compromise between cloud quality and upload time. */
-    const maxDimension = 1536;
+    /* Keep enough resolution for hair/ears while avoiding huge uploads. */
+    const maxDimension = 2048;
     const iw = image.naturalWidth || image.width;
     const ih = image.naturalHeight || image.height;
     const scale = Math.min(1, maxDimension / Math.max(iw,ih));
@@ -1491,7 +1427,11 @@ async function prepareCloudAIInput(blob){
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(image,0,0,canvas.width,canvas.height);
 
-    return await canvasToBlob(canvas,"image/jpeg",0.94);
+    return await canvasToDataURL(canvas,"image/jpeg",0.94);
+}
+
+function canvasToDataURL(canvas,type,quality){
+    return canvas.toDataURL(type,quality);
 }
 
 function loadImageFromBlob(blob){
@@ -1522,102 +1462,105 @@ function canvasToBlob(canvas,type,quality){
     });
 }
 
-async function loadMaskImage(maskValue){
-    if(maskValue instanceof Blob){
-        return await loadImageFromBlob(maskValue);
+async function fetchBlobFromURL(url){
+    const response = await fetch(url,{mode:"cors",cache:"no-store"});
+    if(!response.ok){
+        throw new Error("The AI result image could not be downloaded (HTTP " + response.status + ").");
     }
-
-    if(maskValue instanceof ArrayBuffer){
-        return await loadImageFromBlob(
-            new Blob([maskValue],{type:"image/png"})
-        );
-    }
-
-    if(typeof maskValue !== "string"){
-        throw new Error("The AI mask format is not supported by this browser.");
-    }
-
-    let src = maskValue.trim();
-
-    if(!src.startsWith("data:")){
-        src = "data:image/png;base64," + src;
-    }
-
-    return await new Promise(function(resolve,reject){
-        const image = new Image();
-        image.onload = function(){ resolve(image); };
-        image.onerror = function(){ reject(new Error("Could not decode the AI mask.")); };
-        image.src = src;
-    });
+    return await response.blob();
 }
 
-async function composeTransparentFromMask(sourceBlob,maskValue){
-    const source = await loadImageFromBlob(sourceBlob);
-    const maskImage = await loadMaskImage(maskValue);
+async function runBriaBackgroundRemoval(blob){
+    const aiInput = await prepareCloudAIInput(blob);
 
-    const sw = source.naturalWidth || source.width;
-    const sh = source.naturalHeight || source.height;
+    showProcessing(
+        "AI Background Removal",
+        "Sending photo to secure cloud AI..."
+    );
 
-    const canvas = document.createElement("canvas");
-    canvas.width = sw;
-    canvas.height = sh;
+    let response;
 
-    const ctx = canvas.getContext("2d",{willReadFrequently:true});
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(source,0,0,sw,sh);
+    if(REMOVE_BG_PROXY_URL.trim()){
+        response = await fetch(REMOVE_BG_PROXY_URL.trim(),{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+                image:aiInput,
+                preserve_alpha:true,
+                sync:true
+            })
+        });
+    }else{
+        const token = await getBriaToken();
 
-    const sourceData = ctx.getImageData(0,0,sw,sh);
-
-    const maskCanvas = document.createElement("canvas");
-    maskCanvas.width = sw;
-    maskCanvas.height = sh;
-
-    const mctx = maskCanvas.getContext("2d",{willReadFrequently:true});
-    mctx.imageSmoothingEnabled = true;
-    mctx.imageSmoothingQuality = "high";
-    mctx.drawImage(maskImage,0,0,sw,sh);
-
-    const maskData = mctx.getImageData(0,0,sw,sh).data;
-    const pixels = sourceData.data;
-
-    /*
-     * Soft thresholding:
-     * - very dark mask values disappear
-     * - very bright values remain solid
-     * - the middle range becomes a natural feather
-     * The mask is lightly gamma-adjusted so fine hair transitions are not
-     * turned into a hard stair-step edge.
-     */
-    for(let i=0;i<pixels.length;i+=4){
-        const m = maskData[i];
-        let a;
-
-        if(m <= 18){
-            a = 0;
-        }else if(m >= 245){
-            a = 255;
-        }else{
-            const t = (m - 18) / (245 - 18);
-            const smooth = t * t * (3 - 2 * t);
-            a = Math.round(smooth * 255);
-        }
-
-        pixels[i+3] = a;
+        response = await fetch(BRIA_REMOVE_BG_URL,{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json",
+                "api_token":token
+            },
+            body:JSON.stringify({
+                image:aiInput,
+                preserve_alpha:true,
+                sync:true
+            })
+        });
     }
 
-    ctx.putImageData(sourceData,0,0);
+    const responseText = await response.text();
+    let data = null;
 
-    return await canvasToBlob(canvas,"image/png");
+    try{
+        data = responseText ? JSON.parse(responseText) : null;
+    }catch(error){
+        data = null;
+    }
+
+    if(!response.ok){
+        console.error("Bria background removal response:",response.status,responseText);
+
+        if(response.status === 401 || response.status === 403){
+            clearSavedBriaToken();
+            throw new Error("The Bria API token was rejected. Open AI TOKEN SETTINGS and enter a valid token.");
+        }
+
+        if(response.status === 429){
+            throw new Error("The Bria service is busy or the request limit was reached. Please try again in a moment.");
+        }
+
+        if(response.status === 415){
+            throw new Error("The photo format is not supported by the Bria background-removal service.");
+        }
+
+        const detail =
+            (data && (data.message || data.error || data.detail)) ||
+            responseText.slice(0,240);
+
+        throw new Error("Cloud AI request failed (HTTP " + response.status + "): " + detail);
+    }
+
+    /* Bria v2 synchronous requests return result.image_url. */
+    const imageURL = data && data.result && data.result.image_url;
+
+    if(!imageURL){
+        throw new Error("Cloud AI completed but did not return an output image.");
+    }
+
+    showProcessing(
+        "Downloading Cutout",
+        "Refining the AI result for the ID photo..."
+    );
+
+    return await fetchBlobFromURL(imageURL);
 }
 
 async function initializeBackgroundRemoval(){
-    /* Cloud API is intentionally used on both PC and Android. */
-    await getHFClient();
+    /* No local model is downloaded. The actual request starts on demand. */
+    return true;
 }
 
 async function runBackgroundRemoval(blob){
-    return await runCloudBackgroundRemoval(blob);
+    return await runBriaBackgroundRemoval(blob);
 }
 
 /* =========================================================
@@ -2264,7 +2207,7 @@ async function removeBackground(){
         );
 
         previewStatus.textContent =
-            "BACKGROUND REMOVED • CLOUD AI";
+            "BACKGROUND REMOVED • BRIA CLOUD AI";
 
         backgroundOptions.style.display =
             "grid";
@@ -2300,7 +2243,7 @@ async function removeBackground(){
         let message =
             "Unable to remove the background.\n\n" +
             (error && error.message ? error.message : "The cloud AI service could not process the photo.") +
-            "\n\nOpen AI TOKEN SETTINGS to update the token if necessary.";
+            "\n\nOpen AI TOKEN SETTINGS to update the Bria token if necessary.";
 
         /* Keep the normal message clean, but expose a short diagnostic in
            the console so the exact failure can be identified if needed. */
