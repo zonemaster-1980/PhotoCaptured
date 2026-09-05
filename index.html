@@ -21,10 +21,17 @@
    The model runs locally in the browser after its model/WASM assets
    are downloaded and cached. */
 window.imglyBackgroundRemovalReady = import(
-    "https://esm.sh/@imgly/background-removal@1.7.0?bundle"
+    "https://esm.sh/@imgly/background-removal@1.7.0"
 ).then(function(module){
-    window.imglyRemoveBackground = module.default;
-    return module.default;
+    const remover = module.removeBackground || module.default;
+    if(typeof remover !== "function") {
+        throw new Error("IMG.LY background-removal function was not exported.");
+    }
+    window.imglyRemoveBackground = remover;
+    return remover;
+}).catch(function(error){
+    console.error("IMG.LY library load failed:", error);
+    throw error;
 });
 </script>
 
@@ -1189,24 +1196,72 @@ async function initializeBackgroundRemoval(){
 async function runBackgroundRemoval(blob){
     await initializeBackgroundRemoval();
 
-    const useGPU =
+    const isMobile =
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+
+    const hasWebGPU =
         typeof navigator !== "undefined" &&
         "gpu" in navigator;
 
-    return await window.imglyRemoveBackground(blob,{
+    const baseConfig = {
         /*
-         * Use the full-precision IS-Net model for the cleanest
-         * portrait edges. The FP16 model is faster/smaller but can
-         * introduce visible edge artifacts on fine hair and shoulders.
+         * Explicitly point to the official IMG.LY asset CDN. This avoids
+         * relying on a rewritten/default asset path on GitHub Pages.
          */
-        model:"isnet",
-        device:useGPU ? "gpu" : "cpu",
-        proxyToWorker:true,
+        publicPath:
+            "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/",
+        proxyToWorker:false,
+        fetchArgs:{ mode:"cors" },
         output:{
             format:"image/png",
             type:"foreground"
         }
-    });
+    };
+
+    /*
+     * Mobile browsers can expose WebGPU but still fail to create a stable
+     * ONNX WebGPU session. Try the highest-quality route first on desktop,
+     * then retry with the smaller FP16 CPU-safe route if the first attempt
+     * fails. On mobile, start with FP16/CPU for reliability and fall back
+     * to full precision if the device can handle it.
+     */
+    const attempts = isMobile
+        ? [
+            {model:"isnet_fp16", device:"cpu"},
+            {model:"isnet", device:"cpu"},
+            ...(hasWebGPU ? [{model:"isnet_fp16", device:"gpu"}] : [])
+          ]
+        : [
+            {model:"isnet", device:hasWebGPU ? "gpu" : "cpu"},
+            {model:"isnet_fp16", device:"cpu"}
+          ];
+
+    let lastError = null;
+
+    for(const attempt of attempts){
+        try{
+            console.log(
+                "Background removal attempt:",
+                attempt.model,
+                attempt.device
+            );
+
+            return await window.imglyRemoveBackground(
+                blob,
+                Object.assign({}, baseConfig, attempt)
+            );
+        }catch(error){
+            lastError = error;
+            console.warn(
+                "Background removal attempt failed:",
+                attempt,
+                error
+            );
+        }
+    }
+
+    throw lastError ||
+        new Error("All background-removal attempts failed.");
 }
 
 /* =========================================================
