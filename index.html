@@ -145,98 +145,130 @@ body{
 }
 
 /* =========================================================
-   START SCREEN
+   START SCREEN — MINIMAL DJIS MOBILE THEME
    ========================================================= */
 
 .start-screen{
-    padding:30px 20px;
-    display:flex;
-    flex-direction:column;
-    justify-content:center;
-    min-height:calc(100vh - 70px);
-}
-
-.card{
-    background:#11171b;
-    border:1px solid #232d32;
-    border-radius:18px;
-    padding:22px;
-    box-shadow:0 15px 40px rgba(0,0,0,.25);
-}
-
-.camera-icon{
-    width:76px;
-    height:76px;
-    border-radius:22px;
-    background:#182126;
-    border:1px solid #2a353b;
+    min-height:100vh;
+    padding:24px 18px;
     display:flex;
     align-items:center;
     justify-content:center;
-    font-size:38px;
-    margin:0 auto 20px;
+    background:#080b0d;
 }
 
-h1{
-    text-align:center;
-    margin:0 0 8px;
-    font-size:25px;
-}
-
-.description{
-    text-align:center;
-    color:#8d999f;
-    font-size:13px;
-    line-height:1.6;
-    margin:0 0 25px;
-}
-
-.label{
-    display:block;
-    font-size:12px;
-    font-weight:700;
-    color:#aeb8bd;
-    margin-bottom:8px;
-}
-
-input{
+.start-content{
     width:100%;
-    height:52px;
-    border-radius:12px;
-    border:1px solid #303b41;
-    background:#090d0f;
+    max-width:420px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    transform:translateY(-1vh);
+}
+
+.brand-mark{
+    margin:0;
     color:#fff;
-    padding:0 15px;
-    font-size:16px;
-    outline:none;
-}
-
-input:focus{
-    border-color:#fff;
-}
-
-.primary-btn{
-    width:100%;
-    height:54px;
-    border:0;
-    border-radius:13px;
-    background:#fff;
-    color:#080b0d;
-    font-size:15px;
+    font-size:32px;
+    line-height:1;
     font-weight:900;
-    margin-top:18px;
-    cursor:pointer;
+    letter-spacing:.3px;
 }
 
-.primary-btn:active{
-    transform:scale(.98);
+.brand-subtitle{
+    margin-top:13px;
+    color:#9aa7b0;
+    font-size:13px;
+    line-height:1;
+    letter-spacing:.15px;
+    font-weight:400;
 }
 
-.info{
+.start-id-input{
+    width:100%;
+    height:58px;
+    margin-top:36px;
+    padding:0 20px;
+    border-radius:14px;
+    border:1px solid #29353c;
+    background:#11171b;
+    color:#fff;
     text-align:center;
-    color:#657177;
-    font-size:11px;
+    font-size:21px;
+    font-weight:400;
+    outline:none;
+    box-shadow:none;
+}
+
+.start-id-input::placeholder{
+    color:#71808a;
+    opacity:1;
+}
+
+.start-id-input:focus{
+    border-color:#3b4a53;
+    box-shadow:0 0 0 2px rgba(56,207,243,.08);
+}
+
+.start-capture-btn{
+    width:100%;
+    height:58px;
     margin-top:18px;
+    border:0;
+    border-radius:14px;
+    background:#38cef3;
+    color:#071014;
+    font-size:16px;
+    font-weight:900;
+    letter-spacing:.15px;
+    cursor:pointer;
+    box-shadow:none;
+}
+
+.start-capture-btn:active{
+    transform:scale(.985);
+}
+
+.start-help{
+    margin-top:20px;
+    color:#70808a;
+    text-align:center;
+    font-size:12px;
+    line-height:1.55;
+}
+
+/* The reference start screen is intentionally distraction-free. */
+.app.start-mode .header{
+    display:none;
+}
+
+.app.start-mode .screen{
+    min-height:100vh;
+}
+
+@media (max-width:480px){
+    .start-screen{
+        padding:20px 22px;
+    }
+
+    .brand-mark{
+        font-size:31px;
+    }
+
+    .start-id-input,
+    .start-capture-btn{
+        height:56px;
+    }
+}
+
+@media (max-height:600px){
+    .start-id-input{
+        margin-top:30px;
+    }
+
+    .start-help{
+        margin-top:16px;
+    }
 }
 
 /* =========================================================
@@ -704,7 +736,7 @@ input:focus{
 
 <body>
 
-<div class="app">
+<div class="app start-mode">
 
 <!-- HEADER -->
 
@@ -743,28 +775,19 @@ input:focus{
     id="startScreen"
     class="screen start-screen">
 
-    <div class="card">
+    <div class="start-content">
 
-        <div class="camera-icon">
-            📷
+        <div class="brand-mark">
+            DJIS
         </div>
 
-        <h1>
-            Student Photo
-        </h1>
-
-        <p class="description">
-            Capture a student identification photo.
-            The final image will be prepared at
-            <strong>350 × 450 pixels</strong>.
-        </p>
-
-        <label class="label">
-            STUDENT ID
-        </label>
+        <div class="brand-subtitle">
+            ID PHOTO BOOTH
+        </div>
 
         <input
             id="studentID"
+            class="start-id-input"
             type="text"
             placeholder="Enter Student ID"
             autocomplete="off"
@@ -773,14 +796,13 @@ input:focus{
 
         <button
             id="startBtn"
-            class="primary-btn">
-
-            START CAMERA
-
+            class="primary-btn start-capture-btn">
+            START CAPTURE
         </button>
 
-        <div class="info">
-            Recommended: good lighting and plain background
+        <div class="start-help">
+            <div>Enter the ID number first.</div>
+            <div>The ID will be used only for the downloaded filename.</div>
         </div>
 
     </div>
@@ -3043,6 +3065,8 @@ startBtn.addEventListener(
 
         uploadPortalBtn.style.display =
             "block";
+
+        document.querySelector(".app").classList.remove("start-mode");
 
         startScreen.classList.add(
             "hidden"
