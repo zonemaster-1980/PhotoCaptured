@@ -13,7 +13,7 @@
 
 <meta name="theme-color" content="#080b0d">
 
-<title>DJIS ID Photo Booth</title>
+<title>DJIS ID Photo Booth v9</title>
 
 
 
@@ -1960,157 +1960,144 @@ async function capturePhoto(){
 
     try{
 
-        if(
-            !video.videoWidth ||
-            !video.videoHeight
-        ){
-
-            alert(
-                "Camera is not ready yet."
-            );
-
+        if(!video.videoWidth || !video.videoHeight){
+            alert("Camera is not ready yet.");
             return;
-
         }
 
         captureBtn.disabled = true;
+        const originalButtonHTML = captureBtn.innerHTML;
+        captureBtn.innerHTML = '<span style="font-size:20px;">⏳</span>';
 
-        const originalButtonHTML =
-            captureBtn.innerHTML;
+        /*
+         * V9 Android optimization:
+         * Prefer the camera's native still-photo pipeline when available.
+         * Android Chrome can return a JPEG directly from ImageCapture,
+         * avoiding a large full-resolution PNG encode on the main thread.
+         * The canvas/JPEG path remains as the fallback for other browsers.
+         */
+        let sourceBlob = null;
+        let sourceCanvas = null;
 
-        captureBtn.innerHTML =
-            '<span style="font-size:20px;">⏳</span>';
+        const track = stream && stream.getVideoTracks
+            ? stream.getVideoTracks()[0]
+            : null;
 
-        showProcessing(
-            "Capturing Photo",
-            "Preparing the high-resolution image..."
+        const isAndroid = /Android/i.test(navigator.userAgent);
+
+        if(isAndroid && track && "ImageCapture" in window){
+            try{
+                const imageCapture = new ImageCapture(track);
+                sourceBlob = await imageCapture.takePhoto();
+            }catch(nativeCaptureError){
+                console.warn("Native Android photo capture failed; using canvas fallback.", nativeCaptureError);
+                sourceBlob = null;
+            }
+        }
+
+        if(!sourceBlob){
+            /* Fallback: JPEG instead of PNG to greatly reduce encode time/file size. */
+            sourceCanvas = createFullVideoCanvas();
+            sourceBlob = await canvasToBlob(
+                sourceCanvas,
+                "image/jpeg",
+                0.92
+            );
+        }
+
+        if(!sourceBlob){
+            throw new Error("Unable to create the captured photo.");
+        }
+
+        /*
+         * Keep the high-quality JPEG for cloud background removal.
+         * Do not convert it to PNG here — that was the main source of
+         * the long Android freeze in v8.
+         */
+        fullResolutionBlob = sourceBlob;
+
+        /*
+         * Build only the small 350×450 preview for the UI.
+         * This conversion is tiny compared with the old full-resolution PNG.
+         */
+        const sourceImage = await loadImageFromBlob(sourceBlob);
+        const previewSourceCanvas = document.createElement("canvas");
+        previewSourceCanvas.width = sourceImage.naturalWidth || sourceImage.width;
+        previewSourceCanvas.height = sourceImage.naturalHeight || sourceImage.height;
+
+        const previewSourceCtx = previewSourceCanvas.getContext("2d");
+        previewSourceCtx.imageSmoothingEnabled = true;
+        previewSourceCtx.imageSmoothingQuality = "high";
+
+        /* Native ImageCapture photos are not mirrored like the live preview. */
+        if(currentFacing === "user"){
+            previewSourceCtx.translate(previewSourceCanvas.width,0);
+            previewSourceCtx.scale(-1,1);
+        }
+
+        previewSourceCtx.drawImage(
+            sourceImage,
+            0,
+            0,
+            previewSourceCanvas.width,
+            previewSourceCanvas.height
         );
 
-        /*
-         * IMPORTANT:
-         * Keep the camera's full resolution for AI background removal.
-         * The previous version first reduced the image to 350×450,
-         * which made the AI edge mask visibly pixelated.
-         */
-        const fullCanvas =
-            createFullVideoCanvas();
-
-        fullResolutionBlob =
-            await canvasToBlob(
-                fullCanvas,
-                "image/png"
-            );
-
-        /*
-         * Create the normal 350×450 ID-photo preview.
-         * This is only the display/export size; AI uses fullResolutionBlob.
-         */
-        const finalCanvas =
-            cropToIDPhoto(fullCanvas);
-
-        const previewBlob =
-            await canvasToBlob(
-                finalCanvas,
-                "image/png"
-            );
+        const finalCanvas = cropToIDPhoto(previewSourceCanvas);
+        const previewBlob = await canvasToBlob(
+            finalCanvas,
+            "image/png"
+        );
 
         if(!previewBlob){
-            throw new Error(
-                "Unable to create photo."
-            );
+            throw new Error("Unable to create photo preview.");
         }
 
-        originalBlob =
-            previewBlob;
-
-        capturedBlob =
-            previewBlob;
+        originalBlob = previewBlob;
+        capturedBlob = previewBlob;
 
         if(capturedURL){
-            URL.revokeObjectURL(
-                capturedURL
-            );
+            URL.revokeObjectURL(capturedURL);
         }
 
-        capturedURL =
-            URL.createObjectURL(
-                previewBlob
-            );
+        capturedURL = URL.createObjectURL(previewBlob);
+        previewImage.src = capturedURL;
 
-        previewImage.src =
-            capturedURL;
+        transparentBlob = null;
+        whiteBlob = null;
 
-        transparentBlob =
-            null;
+        photoWrapper.classList.remove("transparent");
+        previewStatus.textContent = "ORIGINAL PHOTO";
 
-        whiteBlob =
-            null;
+        removeBgBtn.style.display = "block";
+        removeBgBtn.disabled = false;
+        removeBgBtn.textContent = "✨ REMOVE BACKGROUND";
 
-        photoWrapper.classList.remove(
-            "transparent"
-        );
+        whiteBgBtn.style.display = "none";
+        backgroundOptions.style.display = "none";
+        uploadPortalBtn.style.display = "block";
 
-        previewStatus.textContent =
-            "ORIGINAL PHOTO";
-
-        removeBgBtn.style.display =
-            "block";
-
-        removeBgBtn.disabled =
-            false;
-
-        removeBgBtn.textContent =
-            "✨ REMOVE BACKGROUND";
-
-        whiteBgBtn.style.display =
-            "none";
-
-        backgroundOptions.style.display =
-            "none";
-
-        uploadPortalBtn.style.display =
-            "block";
-
-        cameraScreen.classList.add(
-            "hidden"
-        );
-
-        previewScreen.classList.remove(
-            "hidden"
-        );
+        cameraScreen.classList.add("hidden");
+        previewScreen.classList.remove("hidden");
 
         stopCamera();
 
-        captureBtn.disabled =
-            false;
-
-        captureBtn.innerHTML =
-            originalButtonHTML;
-
+        captureBtn.disabled = false;
+        captureBtn.innerHTML = originalButtonHTML;
         hideProcessing();
 
     }catch(error){
 
-        console.error(
-            "Capture error:",
-            error
-        );
-
+        console.error("Capture error:",error);
         hideProcessing();
 
-        alert(
-            "Unable to capture photo."
-        );
+        alert("Unable to capture photo.");
 
-        captureBtn.disabled =
-            false;
-
-        captureBtn.innerHTML =
-            '<span style="font-size:16px;">📸</span>';
-
+        captureBtn.disabled = false;
+        captureBtn.innerHTML = '<span style="font-size:16px;">📸</span>';
     }
-
 }
+
 
 /* =========================================================
    REMOVE BACKGROUND - HIGH QUALITY AI
