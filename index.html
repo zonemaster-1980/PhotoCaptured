@@ -16,34 +16,19 @@
 <title>DJIS ID Photo Booth</title>
 
 
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
-
 <script type="module">
 /*
- * IMG.LY is loaded only on desktop. Android uses MediaPipe Selfie Segmentation
- * as a mobile-safe fallback because the standalone IMG.LY ONNX/WASM stack can
- * fail on some Android Chrome devices.
+ * Cloud background removal using Hugging Face Inference Providers.
+ * The model runs remotely, so Android phones do not need to download or
+ * execute a large ONNX/WASM model locally. The user supplies their own
+ * Hugging Face token; it is kept only in this browser's localStorage.
  */
-window.loadImglyBackgroundRemoval = async function(){
-    if(window.imglyRemoveBackground){
-        return window.imglyRemoveBackground;
-    }
-
-    if(!window.imglyBackgroundRemovalLoading){
-        window.imglyBackgroundRemovalLoading = import(
-            "https://esm.sh/@imgly/background-removal@1.7.0"
-        ).then(function(module){
-            const remover = module.removeBackground || module.default;
-            if(typeof remover !== "function"){
-                throw new Error("IMG.LY removeBackground export was not found.");
-            }
-            window.imglyRemoveBackground = remover;
-            return remover;
-        });
-    }
-
-    return await window.imglyBackgroundRemovalLoading;
-};
+window.hfInferenceReady = import(
+    "https://cdn.jsdelivr.net/npm/@huggingface/inference@4.13.28/+esm"
+).then(function(module){
+    window.HFInferenceClient = module.InferenceClient;
+    return module.InferenceClient;
+});
 </script>
 
 <style>
@@ -618,6 +603,104 @@ body{
     color:#080b0d;
 }
 
+.ai-settings-btn{
+    min-height:42px;
+    background:#11171b;
+    color:#9aa7b0;
+    border-color:#29353c;
+    font-size:11px;
+}
+
+.ai-settings-btn:active{
+    background:#182126;
+}
+
+.ai-token-modal{
+    position:fixed;
+    inset:0;
+    z-index:1100;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    background:rgba(0,0,0,.78);
+}
+
+.ai-token-modal.show{
+    display:flex;
+}
+
+.ai-token-box{
+    width:100%;
+    max-width:380px;
+    padding:22px;
+    border:1px solid #303a40;
+    border-radius:18px;
+    background:#11171b;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+}
+
+.ai-token-title{
+    font-size:16px;
+    font-weight:900;
+}
+
+.ai-token-text{
+    margin-top:8px;
+    color:#7f8b91;
+    font-size:11px;
+    line-height:1.55;
+}
+
+.ai-token-input{
+    width:100%;
+    height:48px;
+    margin-top:15px;
+    padding:0 13px;
+    border:1px solid #303a40;
+    border-radius:10px;
+    outline:none;
+    background:#0d1114;
+    color:#fff;
+    font-size:13px;
+}
+
+.ai-token-input:focus{
+    border-color:#38cef3;
+}
+
+.ai-token-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:9px;
+    margin-top:12px;
+}
+
+.ai-token-actions button{
+    min-height:45px;
+    border-radius:10px;
+    border:1px solid #303a40;
+    background:#151b1f;
+    color:#fff;
+    font-weight:800;
+    cursor:pointer;
+}
+
+.ai-token-save{
+    background:#38cef3 !important;
+    color:#071014 !important;
+    border-color:#38cef3 !important;
+}
+
+.ai-token-link{
+    display:block;
+    margin-top:12px;
+    color:#38cef3;
+    text-align:center;
+    font-size:11px;
+    text-decoration:none;
+}
+
 /* =========================================================
    PROCESSING
    ========================================================= */
@@ -968,6 +1051,13 @@ body{
     <div class="actions">
 
         <button
+            id="aiSettingsBtn"
+            class="action-btn ai-settings-btn"
+            type="button">
+            ⚙ AI TOKEN SETTINGS
+        </button>
+
+        <button
             id="removeBgBtn"
             class="action-btn remove-bg-btn">
 
@@ -1173,256 +1263,361 @@ let whiteBlob = null;
 
 
 /* =========================================================
-   AI BACKGROUND REMOVAL
+   CLOUD AI BACKGROUND REMOVAL
    ========================================================= */
 
-let backgroundRemovalReady = false;
+const HF_MODEL = "briaai/RMBG-2.0";
+const HF_PROVIDER = "fal-ai";
+const HF_TOKEN_STORAGE_KEY = "djis_hf_inference_token_v1";
 
-/* =========================================================
-   SHOW PROCESSING
-   ========================================================= */
+let hfClient = null;
 
-function showProcessing(title, text){
-
-    processingTitle.textContent =
-        title;
-
-    processingText.textContent =
-        text;
-
-    processing.classList.add("show");
-
-}
-
-
-function hideProcessing(){
-
-    processing.classList.remove("show");
-
-}
-
-
-/* =========================================================
-   BACKGROUND REMOVAL ENGINE
-   ========================================================= */
-
-let mediaPipeSegmentation = null;
-let mediaPipeSegmentationReady = false;
-
-function isAndroidDevice(){
-    return /Android/i.test(navigator.userAgent || "");
-}
-
-async function initializeMediaPipeSegmentation(){
-    if(mediaPipeSegmentationReady && mediaPipeSegmentation){
-        return mediaPipeSegmentation;
+function getStoredHFToken(){
+    try{
+        return (localStorage.getItem(HF_TOKEN_STORAGE_KEY) || "").trim();
+    }catch(error){
+        console.warn("Unable to read saved Hugging Face token:", error);
+        return "";
     }
+}
 
-    if(typeof SelfieSegmentation === "undefined"){
-        throw new Error("Android background-removal engine could not be loaded.");
+function saveHFToken(token){
+    try{
+        localStorage.setItem(HF_TOKEN_STORAGE_KEY, token.trim());
+    }catch(error){
+        console.warn("Unable to save Hugging Face token:", error);
     }
+}
 
-    mediaPipeSegmentation = new SelfieSegmentation({
-        locateFile: function(file){
-            return "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/" + file;
+function openAITokenModal(){
+    const modal = document.getElementById("aiTokenModal");
+    const input = document.getElementById("aiTokenInput");
+    if(!modal || !input) return;
+
+    input.value = getStoredHFToken();
+    modal.classList.add("show");
+
+    setTimeout(function(){
+        input.focus();
+        input.select();
+    },50);
+}
+
+function closeAITokenModal(){
+    const modal = document.getElementById("aiTokenModal");
+    if(modal) modal.classList.remove("show");
+}
+
+function requestAIToken(){
+    return new Promise(function(resolve,reject){
+        const modal = document.getElementById("aiTokenModal");
+        const input = document.getElementById("aiTokenInput");
+        const saveBtn = document.getElementById("aiTokenSave");
+        const cancelBtn = document.getElementById("aiTokenCancel");
+
+        if(!modal || !input || !saveBtn || !cancelBtn){
+            reject(new Error("AI token settings are unavailable."));
+            return;
         }
-    });
 
-    // Model 0 is the general selfie model and is more suitable for ID portraits.
-    mediaPipeSegmentation.setOptions({
-        modelSelection: 0
-    });
-
-    mediaPipeSegmentationReady = true;
-    return mediaPipeSegmentation;
-}
-
-async function runMediaPipeBackgroundRemoval(blob){
-    const img = await new Promise(function(resolve,reject){
-        const image = new Image();
-        const url = URL.createObjectURL(blob);
-        image.onload = function(){ URL.revokeObjectURL(url); resolve(image); };
-        image.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("Could not load the captured photo.")); };
-        image.src = url;
-    });
-
-    const maxDimension = 1280;
-    const iw = img.naturalWidth || img.width;
-    const ih = img.naturalHeight || img.height;
-    const scale = Math.min(1, maxDimension / Math.max(iw, ih));
-    const w = Math.max(1, Math.round(iw * scale));
-    const h = Math.max(1, Math.round(ih * scale));
-
-    const inputCanvas = document.createElement("canvas");
-    inputCanvas.width = w;
-    inputCanvas.height = h;
-    const ictx = inputCanvas.getContext("2d", {alpha:false});
-    ictx.imageSmoothingEnabled = true;
-    ictx.imageSmoothingQuality = "high";
-    ictx.drawImage(img, 0, 0, w, h);
-
-    const maskCanvas = document.createElement("canvas");
-    maskCanvas.width = w;
-    maskCanvas.height = h;
-
-    const segmentation = await initializeMediaPipeSegmentation();
-
-    const maskReady = new Promise(function(resolve,reject){
-        const previous = segmentation.onResults;
-        segmentation.onResults = function(results){
-            try{
-                if(!results || !results.segmentationMask){
-                    throw new Error("Android segmentation did not return a mask.");
-                }
-                const mctx = maskCanvas.getContext("2d");
-                mctx.clearRect(0,0,w,h);
-                mctx.drawImage(results.segmentationMask,0,0,w,h);
-                segmentation.onResults = previous;
-                resolve();
-            }catch(error){
-                segmentation.onResults = previous;
-                reject(error);
-            }
+        const finish = function(token,error){
+            saveBtn.removeEventListener("click",onSave);
+            cancelBtn.removeEventListener("click",onCancel);
+            input.removeEventListener("keydown",onKey);
+            closeAITokenModal();
+            if(error) reject(error);
+            else resolve(token);
         };
-    });
 
-    await segmentation.send({image: inputCanvas});
-    await maskReady;
+        const onSave = function(){
+            const token = input.value.trim();
+            if(!token || !token.startsWith("hf_")){
+                alert("Please enter a valid Hugging Face token starting with hf_.");
+                input.focus();
+                return;
+            }
+            saveHFToken(token);
+            finish(token,null);
+        };
 
-    const src = ictx.getImageData(0,0,w,h);
-    const mask = maskCanvas.getContext("2d").getImageData(0,0,w,h);
-    const out = document.createElement("canvas");
-    out.width = w;
-    out.height = h;
-    const octx = out.getContext("2d");
-    const data = new Uint8ClampedArray(src.data);
+        const onCancel = function(){
+            finish(null,new Error("No Hugging Face access token was provided."));
+        };
 
-    // Soft ID-photo edge: keep solid foreground, feather only the transition.
-    for(let i=0;i<data.length;i+=4){
-        const m = mask.data[i];
-        let a;
-        if(m <= 35) a = 0;
-        else if(m >= 215) a = 255;
-        else a = Math.round(((m-35)/180)*255);
-        data[i+3] = a;
-    }
+        const onKey = function(event){
+            if(event.key === "Enter") onSave();
+            if(event.key === "Escape") onCancel();
+        };
 
-    const imageData = new ImageData(data,w,h);
-    octx.putImageData(imageData,0,0);
+        saveBtn.addEventListener("click",onSave);
+        cancelBtn.addEventListener("click",onCancel);
+        input.addEventListener("keydown",onKey);
 
-    return await new Promise(function(resolve,reject){
-        out.toBlob(function(result){
-            if(result) resolve(result);
-            else reject(new Error("Could not create the Android cutout."));
-        },"image/png");
+        openAITokenModal();
     });
 }
 
-async function initializeBackgroundRemoval(){
-    // Android deliberately uses MediaPipe. This avoids the ONNX/WASM runtime
-    // failure that is occurring on the user's Android Chrome device.
-    if(isAndroidDevice()){
-        await initializeMediaPipeSegmentation();
-        return;
+async function getHFClient(){
+    let token = getStoredHFToken();
+
+    if(!token){
+        token = await requestAIToken();
     }
 
-    if(backgroundRemovalReady && typeof window.imglyRemoveBackground === "function"){
-        return;
+    if(!window.HFInferenceClient){
+        await window.hfInferenceReady;
     }
 
-    if(typeof window.loadImglyBackgroundRemoval !== "function"){
-        throw new Error("Desktop AI loader is unavailable.");
+    if(!window.HFInferenceClient){
+        throw new Error("Hugging Face browser client could not be loaded.");
     }
 
-    await window.loadImglyBackgroundRemoval();
-
-    if(typeof window.imglyRemoveBackground !== "function"){
-        throw new Error("Desktop AI background removal library failed to load.");
+    if(!hfClient){
+        hfClient = new window.HFInferenceClient(token);
     }
 
-    backgroundRemovalReady = true;
+    return hfClient;
 }
 
-/* =========================================================
-   PREPARE MOBILE AI INPUT
-   ========================================================= */
+function clearSavedHFToken(){
+    try{
+        localStorage.removeItem(HF_TOKEN_STORAGE_KEY);
+    }catch(error){
+        console.warn(error);
+    }
+    hfClient = null;
+}
 
-async function prepareAIInput(blob){
-    if(!isAndroidDevice()){
-        return blob;
+/*
+ * The cloud model returns a black/white mask. Convert that mask plus the
+ * original photograph into a transparent PNG. This keeps the original RGB
+ * pixels and uses the AI mask only for alpha, which avoids the gray/white
+ * halo introduced by using an already-background-removed image as input.
+ */
+async function runCloudBackgroundRemoval(blob){
+
+    const client = await getHFClient();
+
+    const aiInput = await prepareCloudAIInput(blob);
+
+    showProcessing(
+        "AI Background Removal",
+        "Uploading photo securely for background removal..."
+    );
+
+    let result;
+
+    try{
+        result = await client.imageSegmentation({
+            data: aiInput,
+            model: HF_MODEL,
+            provider: HF_PROVIDER
+        });
+    }catch(error){
+        console.error("Hugging Face background removal error:", error);
+
+        const text = String(error && error.message || error || "");
+
+        if(/401|403|unauthorized|forbidden|token|authentication/i.test(text)){
+            clearSavedHFToken();
+            throw new Error(
+                "The Hugging Face token was rejected. Please enter a valid token with Inference Providers permission."
+            );
+        }
+
+        if(/402|credit|payment|billing|quota/i.test(text)){
+            throw new Error(
+                "The free Hugging Face inference credit has been exhausted."
+            );
+        }
+
+        throw new Error(
+            "Cloud AI request failed: " + text.slice(0,240)
+        );
     }
 
-    const img = await new Promise(function(resolve,reject){
-        const image = new Image();
-        const url = URL.createObjectURL(blob);
-        image.onload = function(){ URL.revokeObjectURL(url); resolve(image); };
-        image.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("Could not prepare the camera image.")); };
-        image.src = url;
+    /* Some provider adapters may return the finished image directly. */
+    if(result instanceof Blob){
+        return result;
+    }
+
+    if(result && result.image instanceof Blob){
+        return result.image;
+    }
+
+    if(!Array.isArray(result) || !result.length){
+        throw new Error("Cloud AI returned no segmentation mask.");
+    }
+
+    /*
+     * RMBG-2.0 through the Hugging Face image-segmentation interface returns
+     * a foreground segmentation mask. Use the highest-confidence segment.
+     */
+    result.sort(function(a,b){
+        return (Number(b && b.score) || 0) - (Number(a && a.score) || 0);
     });
 
-    const maxDimension = 1280;
-    const iw = img.naturalWidth || img.width;
-    const ih = img.naturalHeight || img.height;
-    if(Math.max(iw,ih) <= maxDimension) return blob;
+    const best = result[0];
+    if(!best || !best.mask){
+        throw new Error("Cloud AI returned an invalid mask.");
+    }
 
-    const scale = maxDimension / Math.max(iw,ih);
+    showProcessing(
+        "Building Cutout",
+        "Applying the AI mask and refining the edges..."
+    );
+
+    return await composeTransparentFromMask(
+        aiInput,
+        best.mask
+    );
+}
+
+async function prepareCloudAIInput(blob){
+    const image = await loadImageFromBlob(blob);
+
+    /* 1536px is a good compromise between cloud quality and upload time. */
+    const maxDimension = 1536;
+    const iw = image.naturalWidth || image.width;
+    const ih = image.naturalHeight || image.height;
+    const scale = Math.min(1, maxDimension / Math.max(iw,ih));
+
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1,Math.round(iw*scale));
-    canvas.height = Math.max(1,Math.round(ih*scale));
+    canvas.width = Math.max(1,Math.round(iw * scale));
+    canvas.height = Math.max(1,Math.round(ih * scale));
+
     const ctx = canvas.getContext("2d",{alpha:false});
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    ctx.drawImage(image,0,0,canvas.width,canvas.height);
 
-    return await new Promise(function(resolve,reject){
-        canvas.toBlob(function(result){
-            if(result) resolve(result);
-            else reject(new Error("Could not create mobile AI input."));
-        },"image/jpeg",0.94);
+    return await canvasToBlob(canvas,"image/jpeg",0.94);
+}
+
+function loadImageFromBlob(blob){
+    return new Promise(function(resolve,reject){
+        const image = new Image();
+        const url = URL.createObjectURL(blob);
+
+        image.onload = function(){
+            URL.revokeObjectURL(url);
+            resolve(image);
+        };
+
+        image.onerror = function(){
+            URL.revokeObjectURL(url);
+            reject(new Error("Could not load the captured photo."));
+        };
+
+        image.src = url;
     });
 }
 
-/* =========================================================
-   RUN BACKGROUND REMOVAL
-   ========================================================= */
+function canvasToBlob(canvas,type,quality){
+    return new Promise(function(resolve,reject){
+        canvas.toBlob(function(blob){
+            if(blob) resolve(blob);
+            else reject(new Error("Could not create the AI input image."));
+        },type,quality);
+    });
+}
+
+async function loadMaskImage(maskValue){
+    if(maskValue instanceof Blob){
+        return await loadImageFromBlob(maskValue);
+    }
+
+    if(maskValue instanceof ArrayBuffer){
+        return await loadImageFromBlob(
+            new Blob([maskValue],{type:"image/png"})
+        );
+    }
+
+    if(typeof maskValue !== "string"){
+        throw new Error("The AI mask format is not supported by this browser.");
+    }
+
+    let src = maskValue.trim();
+
+    if(!src.startsWith("data:")){
+        src = "data:image/png;base64," + src;
+    }
+
+    return await new Promise(function(resolve,reject){
+        const image = new Image();
+        image.onload = function(){ resolve(image); };
+        image.onerror = function(){ reject(new Error("Could not decode the AI mask.")); };
+        image.src = src;
+    });
+}
+
+async function composeTransparentFromMask(sourceBlob,maskValue){
+    const source = await loadImageFromBlob(sourceBlob);
+    const maskImage = await loadMaskImage(maskValue);
+
+    const sw = source.naturalWidth || source.width;
+    const sh = source.naturalHeight || source.height;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = sw;
+    canvas.height = sh;
+
+    const ctx = canvas.getContext("2d",{willReadFrequently:true});
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(source,0,0,sw,sh);
+
+    const sourceData = ctx.getImageData(0,0,sw,sh);
+
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = sw;
+    maskCanvas.height = sh;
+
+    const mctx = maskCanvas.getContext("2d",{willReadFrequently:true});
+    mctx.imageSmoothingEnabled = true;
+    mctx.imageSmoothingQuality = "high";
+    mctx.drawImage(maskImage,0,0,sw,sh);
+
+    const maskData = mctx.getImageData(0,0,sw,sh).data;
+    const pixels = sourceData.data;
+
+    /*
+     * Soft thresholding:
+     * - very dark mask values disappear
+     * - very bright values remain solid
+     * - the middle range becomes a natural feather
+     * The mask is lightly gamma-adjusted so fine hair transitions are not
+     * turned into a hard stair-step edge.
+     */
+    for(let i=0;i<pixels.length;i+=4){
+        const m = maskData[i];
+        let a;
+
+        if(m <= 18){
+            a = 0;
+        }else if(m >= 245){
+            a = 255;
+        }else{
+            const t = (m - 18) / (245 - 18);
+            const smooth = t * t * (3 - 2 * t);
+            a = Math.round(smooth * 255);
+        }
+
+        pixels[i+3] = a;
+    }
+
+    ctx.putImageData(sourceData,0,0);
+
+    return await canvasToBlob(canvas,"image/png");
+}
+
+async function initializeBackgroundRemoval(){
+    /* Cloud API is intentionally used on both PC and Android. */
+    await getHFClient();
+}
 
 async function runBackgroundRemoval(blob){
-    if(isAndroidDevice()){
-        return await runMediaPipeBackgroundRemoval(blob);
-    }
-
-    await initializeBackgroundRemoval();
-    const aiInput = await prepareAIInput(blob);
-
-    const baseConfig = {
-        debug:true,
-        proxyToWorker:false,
-        output:{
-            format:"image/png",
-            type:"foreground"
-        }
-    };
-
-    const attempts = [
-        {model:"isnet", device:"cpu"},
-        {model:"isnet_fp16", device:"cpu"}
-    ];
-
-    let lastError = null;
-    for(const attempt of attempts){
-        try{
-            console.log("Desktop background removal attempt:",attempt.model,attempt.device);
-            return await window.imglyRemoveBackground(
-                aiInput,
-                Object.assign({},baseConfig,attempt)
-            );
-        }catch(error){
-            lastError = error;
-            console.error("Desktop background removal attempt failed:",attempt,error);
-        }
-    }
-
-    throw lastError || new Error("All desktop background-removal attempts failed.");
+    return await runCloudBackgroundRemoval(blob);
 }
 
 /* =========================================================
@@ -1997,7 +2192,7 @@ async function removeBackground(){
 
         showProcessing(
             "Removing Background",
-            isAndroidDevice() ? "Mobile-safe background removal is starting..." : "AI is preparing a high-resolution cutout..."
+            "Cloud AI is preparing your photo..."
         );
 
         await initializeBackgroundRemoval();
@@ -2012,7 +2207,7 @@ async function removeBackground(){
 
         showProcessing(
             "Removing Background",
-            isAndroidDevice() ? "Android is separating the person from the background..." : "AI is separating the person from the background..."
+            "AI is separating the person from the background..."
         );
 
         const aiBlob =
@@ -2069,7 +2264,7 @@ async function removeBackground(){
         );
 
         previewStatus.textContent =
-            "BACKGROUND REMOVED • AI";
+            "BACKGROUND REMOVED • CLOUD AI";
 
         backgroundOptions.style.display =
             "grid";
@@ -2104,8 +2299,8 @@ async function removeBackground(){
 
         let message =
             "Unable to remove the background.\n\n" +
-            "The AI model could not start on this device.\n" +
-            "Please check your internet connection and try again.";
+            (error && error.message ? error.message : "The cloud AI service could not process the photo.") +
+            "\n\nOpen AI TOKEN SETTINGS to update the token if necessary.";
 
         /* Keep the normal message clean, but expose a short diagnostic in
            the console so the exact failure can be identified if needed. */
@@ -3083,6 +3278,18 @@ startBtn.addEventListener(
 
 
 /* =========================================================
+   AI TOKEN SETTINGS
+   ========================================================= */
+
+const aiSettingsBtn = document.getElementById("aiSettingsBtn");
+
+if(aiSettingsBtn){
+    aiSettingsBtn.addEventListener("click",function(){
+        openAITokenModal();
+    });
+}
+
+/* =========================================================
    BUTTON EVENTS
    ========================================================= */
 
@@ -3178,19 +3385,7 @@ document.addEventListener(
 window.addEventListener(
     "load",
     function(){
-
-        initializeSegmentation()
-            .catch(
-                function(error){
-
-                    console.warn(
-                        "AI initialization:",
-                        error
-                    );
-
-                }
-            );
-
+        /* The cloud AI client is loaded on demand when Remove Background is pressed. */
     }
 );
 
