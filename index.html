@@ -226,9 +226,12 @@ input:focus{
    ========================================================= */
 
 .camera-screen{
-    min-height:calc(100vh - 70px);
+    height:calc(100svh - 70px);
+    min-height:0;
     display:flex;
     flex-direction:column;
+    position:relative;
+    overflow:hidden;
 }
 
 .camera-top{
@@ -267,6 +270,7 @@ input:focus{
 
 .camera-area{
     flex:1;
+    min-height:0;
     position:relative;
     display:flex;
     justify-content:center;
@@ -313,36 +317,79 @@ input:focus{
    ========================================================= */
 
 .camera-controls{
-    padding:15px;
-    background:#0d1114;
-    border-top:1px solid #1d252a;
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:20;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:16px;
+    padding:14px 18px calc(18px + env(safe-area-inset-bottom));
+    pointer-events:none;
+    background:linear-gradient(
+        to top,
+        rgba(0,0,0,.72),
+        rgba(0,0,0,0)
+    );
 }
 
 .capture-btn{
-    width:100%;
-    height:58px;
-    border:0;
-    border-radius:14px;
+    width:78px;
+    height:78px;
+    flex:0 0 78px;
+    border:5px solid rgba(255,255,255,.95);
+    border-radius:50%;
     background:#fff;
     color:#080b0d;
-    font-size:16px;
+    font-size:0;
     font-weight:900;
     cursor:pointer;
+    pointer-events:auto;
+    box-shadow:
+        0 4px 18px rgba(0,0,0,.45),
+        inset 0 0 0 2px rgba(0,0,0,.08);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:transform .12s ease,opacity .12s ease;
+}
+
+.capture-btn::before{
+    content:"";
+    width:58px;
+    height:58px;
+    border-radius:50%;
+    background:#fff;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);
+}
+
+.capture-btn:active{
+    transform:scale(.91);
 }
 
 .capture-btn:disabled{
     opacity:.5;
+    pointer-events:none;
 }
 
 .switch-btn{
-    width:100%;
-    height:42px;
-    margin-top:10px;
-    border:1px solid #303b41;
-    border-radius:11px;
-    background:#151b1f;
+    width:48px;
+    height:48px;
+    margin:0;
+    padding:0;
+    border:1px solid rgba(255,255,255,.35);
+    border-radius:50%;
+    background:rgba(13,17,20,.82);
     color:#fff;
-    font-weight:700;
+    font-size:20px;
+    cursor:pointer;
+    pointer-events:auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    backdrop-filter:blur(8px);
 }
 
 /* =========================================================
@@ -583,6 +630,23 @@ input:focus{
 
 @media(max-width:380px){
 
+    .capture-btn{
+        width:70px;
+        height:70px;
+        flex-basis:70px;
+    }
+
+    .capture-btn::before{
+        width:52px;
+        height:52px;
+    }
+
+    .switch-btn{
+        width:44px;
+        height:44px;
+        font-size:18px;
+    }
+
     .header{
         height:62px;
     }
@@ -594,6 +658,10 @@ input:focus{
     .camera-screen,
     .preview-screen{
         min-height:calc(100vh - 62px);
+    }
+
+    .camera-screen{
+        height:calc(100svh - 62px);
     }
 
     .logo{
@@ -1059,6 +1127,7 @@ let capturedBlob = null;
 let capturedURL = null;
 
 let originalBlob = null;
+let fullResolutionBlob = null;
 let transparentBlob = null;
 let whiteBlob = null;
 
@@ -1125,8 +1194,14 @@ async function runBackgroundRemoval(blob){
         "gpu" in navigator;
 
     return await window.imglyRemoveBackground(blob,{
-        model:"isnet_fp16",
+        /*
+         * Use the full-precision IS-Net model for the cleanest
+         * portrait edges. The FP16 model is faster/smaller but can
+         * introduce visible edge artifacts on fine hair and shoulders.
+         */
+        model:"isnet",
         device:useGPU ? "gpu" : "cpu",
+        proxyToWorker:true,
         output:{
             format:"image/png",
             type:"foreground"
@@ -1544,111 +1619,130 @@ async function capturePhoto(){
 
         }
 
-        captureBtn.disabled =
-            true;
+        captureBtn.disabled = true;
 
-        captureBtn.textContent =
-            "⏳ CAPTURING...";
+        const originalButtonHTML =
+            captureBtn.innerHTML;
 
+        captureBtn.innerHTML =
+            '<span style="font-size:20px;">⏳</span>';
+
+        showProcessing(
+            "Capturing Photo",
+            "Preparing the high-resolution image..."
+        );
+
+        /*
+         * IMPORTANT:
+         * Keep the camera's full resolution for AI background removal.
+         * The previous version first reduced the image to 350×450,
+         * which made the AI edge mask visibly pixelated.
+         */
         const fullCanvas =
             createFullVideoCanvas();
 
+        fullResolutionBlob =
+            await canvasToBlob(
+                fullCanvas,
+                "image/png"
+            );
+
+        /*
+         * Create the normal 350×450 ID-photo preview.
+         * This is only the display/export size; AI uses fullResolutionBlob.
+         */
         const finalCanvas =
             cropToIDPhoto(fullCanvas);
 
-        finalCanvas.toBlob(
-            function(blob){
+        const previewBlob =
+            await canvasToBlob(
+                finalCanvas,
+                "image/png"
+            );
 
-                if(!blob){
+        if(!previewBlob){
+            throw new Error(
+                "Unable to create photo."
+            );
+        }
 
-                    alert(
-                        "Unable to create photo."
-                    );
+        originalBlob =
+            previewBlob;
 
-                    captureBtn.disabled =
-                        false;
+        capturedBlob =
+            previewBlob;
 
-                    captureBtn.textContent =
-                        "📸 CAPTURE";
+        if(capturedURL){
+            URL.revokeObjectURL(
+                capturedURL
+            );
+        }
 
-                    return;
+        capturedURL =
+            URL.createObjectURL(
+                previewBlob
+            );
 
-                }
+        previewImage.src =
+            capturedURL;
 
-                originalBlob =
-                    blob;
+        transparentBlob =
+            null;
 
-                capturedBlob =
-                    blob;
+        whiteBlob =
+            null;
 
-                if(capturedURL){
-
-                    URL.revokeObjectURL(
-                        capturedURL
-                    );
-
-                }
-
-                capturedURL =
-                    URL.createObjectURL(blob);
-
-                previewImage.src =
-                    capturedURL;
-
-                transparentBlob =
-                    null;
-
-                whiteBlob =
-                    null;
-
-                photoWrapper.classList.remove(
-                    "transparent"
-                );
-
-                previewStatus.textContent =
-                    "ORIGINAL PHOTO";
-
-                removeBgBtn.style.display =
-                    "block";
-
-                removeBgBtn.disabled =
-                    false;
-
-                removeBgBtn.textContent =
-                    "✨ REMOVE BACKGROUND";
-
-                whiteBgBtn.style.display =
-                    "none";
-
-                backgroundOptions.style.display =
-                    "none";
-
-                uploadPortalBtn.style.display =
-                    "block";
-
-                cameraScreen.classList.add(
-                    "hidden"
-                );
-
-                previewScreen.classList.remove(
-                    "hidden"
-                );
-
-                stopCamera();
-
-                captureBtn.disabled =
-                    false;
-
-                captureBtn.textContent =
-                    "📸 CAPTURE";
-
-            },
-            "image/png"
+        photoWrapper.classList.remove(
+            "transparent"
         );
+
+        previewStatus.textContent =
+            "ORIGINAL PHOTO";
+
+        removeBgBtn.style.display =
+            "block";
+
+        removeBgBtn.disabled =
+            false;
+
+        removeBgBtn.textContent =
+            "✨ REMOVE BACKGROUND";
+
+        whiteBgBtn.style.display =
+            "none";
+
+        backgroundOptions.style.display =
+            "none";
+
+        uploadPortalBtn.style.display =
+            "block";
+
+        cameraScreen.classList.add(
+            "hidden"
+        );
+
+        previewScreen.classList.remove(
+            "hidden"
+        );
+
+        stopCamera();
+
+        captureBtn.disabled =
+            false;
+
+        captureBtn.innerHTML =
+            originalButtonHTML;
+
+        hideProcessing();
 
     }catch(error){
 
-        console.error(error);
+        console.error(
+            "Capture error:",
+            error
+        );
+
+        hideProcessing();
 
         alert(
             "Unable to capture photo."
@@ -1657,140 +1751,513 @@ async function capturePhoto(){
         captureBtn.disabled =
             false;
 
-        captureBtn.textContent =
-            "📸 CAPTURE";
+        captureBtn.innerHTML =
+            '<span style="font-size:16px;">📸</span>';
 
     }
 
 }
-
 
 /* =========================================================
    REMOVE BACKGROUND - HIGH QUALITY AI
    ========================================================= */
 
 async function removeBackground(){
+
     if(!originalBlob){
-        alert("Please capture a photo first.");
+        alert(
+            "Please capture a photo first."
+        );
         return;
     }
 
     try{
-        removeBgBtn.disabled = true;
-        removeBgBtn.textContent = "⏳ PROCESSING...";
+
+        removeBgBtn.disabled =
+            true;
+
+        removeBgBtn.textContent =
+            "⏳ PROCESSING...";
 
         showProcessing(
             "Removing Background",
-            "AI is creating a clean, soft-edged cutout..."
+            "AI is preparing a high-resolution cutout..."
         );
 
         await initializeBackgroundRemoval();
 
+        /*
+         * Use the ORIGINAL FULL-RESOLUTION camera frame for AI.
+         * This is the key quality improvement.
+         */
+        const aiInput =
+            fullResolutionBlob ||
+            originalBlob;
+
         showProcessing(
             "Removing Background",
-            "AI is separating the student from the background..."
+            "AI is separating the person from the background..."
         );
 
-        const aiBlob = await runBackgroundRemoval(originalBlob);
+        const aiBlob =
+            await runBackgroundRemoval(
+                aiInput
+            );
 
         if(!aiBlob){
-            throw new Error("AI did not return an image.");
+            throw new Error(
+                "AI did not return an image."
+            );
         }
 
         showProcessing(
-            "Finishing Photo",
-            "Optimizing transparent edges..."
+            "Softening Edges",
+            "Refining hair, ears and shoulder edges..."
         );
 
         /*
-         * Keep the AI-generated alpha mask intact.
-         * Do not threshold it like the old MediaPipe implementation.
-         * The IMG.LY matting result already contains soft alpha values
-         * around hair, ears, shoulders and other fine edges.
+         * Crop the AI result AFTER segmentation.
+         * The alpha edge is therefore downsampled from the
+         * high-resolution mask into the final 350×450 image.
          */
-        transparentBlob = await normalizeTransparentPNG(aiBlob);
-        capturedBlob = transparentBlob;
+        transparentBlob =
+            await cropAndSoftenTransparentPNG(
+                aiBlob
+            );
 
-        if(capturedURL){
-            URL.revokeObjectURL(capturedURL);
+        if(!transparentBlob){
+            throw new Error(
+                "Unable to create transparent PNG."
+            );
         }
 
-        capturedURL = URL.createObjectURL(transparentBlob);
-        previewImage.src = capturedURL;
+        capturedBlob =
+            transparentBlob;
 
-        photoWrapper.classList.add("transparent");
-        previewStatus.textContent = "BACKGROUND REMOVED • AI";
+        if(capturedURL){
+            URL.revokeObjectURL(
+                capturedURL
+            );
+        }
 
-        backgroundOptions.style.display = "grid";
-        whiteBgBtn.style.display = "block";
+        capturedURL =
+            URL.createObjectURL(
+                transparentBlob
+            );
 
-        transparentBtn.classList.add("active");
-        whiteOptionBtn.classList.remove("active");
+        previewImage.src =
+            capturedURL;
 
-        removeBgBtn.textContent = "✓ BACKGROUND REMOVED";
-        removeBgBtn.disabled = true;
+        photoWrapper.classList.add(
+            "transparent"
+        );
+
+        previewStatus.textContent =
+            "BACKGROUND REMOVED • AI";
+
+        backgroundOptions.style.display =
+            "grid";
+
+        whiteBgBtn.style.display =
+            "block";
+
+        transparentBtn.classList.add(
+            "active"
+        );
+
+        whiteOptionBtn.classList.remove(
+            "active"
+        );
+
+        removeBgBtn.textContent =
+            "✓ BACKGROUND REMOVED";
+
+        removeBgBtn.disabled =
+            true;
 
         hideProcessing();
 
     }catch(error){
-        console.error("AI background removal error:",error);
+
+        console.error(
+            "AI background removal error:",
+            error
+        );
 
         hideProcessing();
 
         let message =
             "Unable to remove the background.\n\n" +
-            "Please make sure you have an internet connection and try again.";
+            "Please make sure you have an internet connection " +
+            "and try again.";
 
-        if(error && error.message){
-            console.warn(error.message);
+        if(
+            error &&
+            error.message
+        ){
+            console.warn(
+                error.message
+            );
         }
 
         alert(message);
 
-        removeBgBtn.disabled = false;
-        removeBgBtn.textContent = "✨ REMOVE BACKGROUND";
+        removeBgBtn.disabled =
+            false;
+
+        removeBgBtn.textContent =
+            "✨ REMOVE BACKGROUND";
+
     }
+
 }
 
 /* =========================================================
    NORMALIZE AI PNG
    ========================================================= */
 
-async function normalizeTransparentPNG(blob){
-    const image = new Image();
-    const url = URL.createObjectURL(blob);
+async function cropAndSoftenTransparentPNG(blob){
+
+    const image =
+        new Image();
+
+    const url =
+        URL.createObjectURL(blob);
 
     try{
-        await new Promise(function(resolve,reject){
-            image.onload = resolve;
-            image.onerror = reject;
-            image.src = url;
-        });
 
-        const canvas = document.createElement("canvas");
-        canvas.width = OUTPUT_WIDTH;
-        canvas.height = OUTPUT_HEIGHT;
+        await new Promise(
+            function(resolve,reject){
 
-        const ctx = canvas.getContext("2d",{
-            alpha:true,
-            willReadFrequently:false
-        });
+                image.onload =
+                    resolve;
 
-        ctx.clearRect(0,0,OUTPUT_WIDTH,OUTPUT_HEIGHT);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(
-            image,
+                image.onerror =
+                    reject;
+
+                image.src =
+                    url;
+
+            }
+        );
+
+        /*
+         * First resize the AI result from its native/full resolution
+         * into the exact 7:9 ID-photo crop. High-quality canvas
+         * resampling creates a much smoother alpha edge than processing
+         * an already-small 350×450 image.
+         */
+        const sourceWidth =
+            image.naturalWidth ||
+            image.width;
+
+        const sourceHeight =
+            image.naturalHeight ||
+            image.height;
+
+        const targetRatio =
+            OUTPUT_WIDTH /
+            OUTPUT_HEIGHT;
+
+        const sourceRatio =
+            sourceWidth /
+            sourceHeight;
+
+        let cropWidth;
+        let cropHeight;
+        let cropX;
+        let cropY;
+
+        if(sourceRatio > targetRatio){
+
+            cropHeight =
+                sourceHeight;
+
+            cropWidth =
+                sourceHeight *
+                targetRatio;
+
+            cropX =
+                (sourceWidth - cropWidth) / 2;
+
+            cropY = 0;
+
+        }else{
+
+            cropWidth =
+                sourceWidth;
+
+            cropHeight =
+                sourceWidth /
+                targetRatio;
+
+            cropX = 0;
+
+            cropY =
+                (sourceHeight - cropHeight) / 2;
+
+        }
+
+        const canvas =
+            document.createElement("canvas");
+
+        canvas.width =
+            OUTPUT_WIDTH;
+
+        canvas.height =
+            OUTPUT_HEIGHT;
+
+        const ctx =
+            canvas.getContext(
+                "2d",
+                {
+                    alpha:true,
+                    willReadFrequently:true
+                }
+            );
+
+        ctx.clearRect(
             0,
             0,
             OUTPUT_WIDTH,
             OUTPUT_HEIGHT
         );
 
-        return await canvasToBlob(canvas,"image/png");
+        ctx.imageSmoothingEnabled =
+            true;
+
+        ctx.imageSmoothingQuality =
+            "high";
+
+        ctx.drawImage(
+            image,
+            cropX,
+            cropY,
+            cropWidth,
+            cropHeight,
+            0,
+            0,
+            OUTPUT_WIDTH,
+            OUTPUT_HEIGHT
+        );
+
+        /*
+         * Small edge refinement:
+         * - remove extremely faint ghost pixels
+         * - lightly smooth only pixels around the alpha transition
+         * - keep solid subject pixels untouched
+         *
+         * This avoids the hard stair-step edge visible in the
+         * previous result without making the person look blurry.
+         */
+        softenAlphaEdges(ctx);
+
+        return await canvasToBlob(
+            canvas,
+            "image/png"
+        );
+
     }finally{
-        URL.revokeObjectURL(url);
+
+        URL.revokeObjectURL(
+            url
+        );
+
     }
+
+}
+
+
+/* =========================================================
+   SOFT ALPHA EDGE REFINEMENT
+   ========================================================= */
+
+function softenAlphaEdges(ctx){
+
+    const imageData =
+        ctx.getImageData(
+            0,
+            0,
+            OUTPUT_WIDTH,
+            OUTPUT_HEIGHT
+        );
+
+    const pixels =
+        imageData.data;
+
+    const width =
+        OUTPUT_WIDTH;
+
+    const height =
+        OUTPUT_HEIGHT;
+
+    /*
+     * Remove very low-alpha residue first.
+     * These pixels are usually background-colored ghosting.
+     */
+    for(
+        let i = 3;
+        i < pixels.length;
+        i += 4
+    ){
+
+        if(pixels[i] < 10){
+            pixels[i] = 0;
+        }
+
+    }
+
+    /*
+     * 3×3 Gaussian-like alpha smoothing.
+     * RGB is NOT blurred, only the transparency edge.
+     */
+    const sourceAlpha =
+        new Uint8ClampedArray(
+            width * height
+        );
+
+    for(
+        let y = 0;
+        y < height;
+        y++
+    ){
+
+        for(
+            let x = 0;
+            x < width;
+            x++
+        ){
+
+            sourceAlpha[
+                y * width + x
+            ] =
+                pixels[
+                    (y * width + x) * 4 + 3
+                ];
+
+        }
+
+    }
+
+    const weights = [
+        1,2,1,
+        2,4,2,
+        1,2,1
+    ];
+
+    for(
+        let y = 1;
+        y < height - 1;
+        y++
+    ){
+
+        for(
+            let x = 1;
+        x < width - 1;
+        x++
+        ){
+
+            const index =
+                y * width + x;
+
+            const a =
+                sourceAlpha[index];
+
+            /*
+             * Only refine transition pixels.
+             * Fully opaque and fully transparent areas remain exact.
+             */
+            if(
+                a <= 12 ||
+                a >= 243
+            ){
+                continue;
+            }
+
+            let sum = 0;
+            let weightSum = 0;
+            let hasTransparentNeighbor = false;
+            let hasOpaqueNeighbor = false;
+
+            let wi = 0;
+
+            for(
+                let dy = -1;
+                dy <= 1;
+                dy++
+            ){
+
+                for(
+                    let dx = -1;
+                    dx <= 1;
+                    dx++
+                ){
+
+                    const neighbor =
+                        sourceAlpha[
+                            (y + dy) * width +
+                            (x + dx)
+                        ];
+
+                    const weight =
+                        weights[wi++];
+
+                    sum +=
+                        neighbor *
+                        weight;
+
+                    weightSum +=
+                        weight;
+
+                    if(neighbor < 30){
+                        hasTransparentNeighbor = true;
+                    }
+
+                    if(neighbor > 225){
+                        hasOpaqueNeighbor = true;
+                    }
+
+                }
+
+            }
+
+            /*
+             * Only soften an actual boundary.
+             */
+            if(
+                hasTransparentNeighbor &&
+                hasOpaqueNeighbor
+            ){
+
+                pixels[
+                    index * 4 + 3
+                ] =
+                    Math.round(
+                        sum /
+                        weightSum
+                    );
+
+            }
+
+        }
+
+    }
+
+    ctx.putImageData(
+        imageData,
+        0,
+        0
+    );
+
+}
+
+
+/* =========================================================
+   LEGACY NORMALIZE WRAPPER
+   ========================================================= */
+
+async function normalizeTransparentPNG(blob){
+    return await cropAndSoftenTransparentPNG(blob);
 }
 
 /* =========================================================
@@ -2296,6 +2763,7 @@ async function retakePhoto(){
 
     capturedBlob = null;
     originalBlob = null;
+    fullResolutionBlob = null;
     transparentBlob = null;
     whiteBlob = null;
 
