@@ -13,7 +13,7 @@
 
 <meta name="theme-color" content="#080b0d">
 
-<title>DJIS ID Photo Booth v9</title>
+<title>DJIS ID Photo Booth v10 - Android Capture</title>
 
 
 
@@ -1250,6 +1250,8 @@ let originalBlob = null;
 let fullResolutionBlob = null;
 let transparentBlob = null;
 let whiteBlob = null;
+let originalIDPhotoReady = false;
+let originalCaptureSourceBlob = null;
 
 
 /* =========================================================
@@ -1962,83 +1964,91 @@ function cropToIDPhoto(sourceCanvas){
 
 async function capturePhoto(){
     try{
-        if(!video.videoWidth || !video.videoHeight){
+        if(!video.videoWidth || !video.videoHeight || !stream){
             alert("Camera is not ready yet.");
             return;
         }
 
         /*
-         * Android capture optimization:
-         * Do NOT encode the camera frame to a large PNG before showing
-         * the preview. The previous flow could block the UI while the
-         * phone encoded a 1920×1080 PNG.
-         *
-         * We create only one reasonably sized JPEG for AI and one small
-         * 350×450 PNG for the preview. The camera is stopped only after
-         * the preview has been prepared.
+         * MOBILE-FIRST CAPTURE:
+         * Use the browser's native still-photo pipeline when available.
+         * This avoids drawing the live 1280x720 frame into a canvas and
+         * encoding it before the preview appears. The old v9 flow did both
+         * operations on the Android UI thread, which is what caused the
+         * visible freeze.
          */
         captureBtn.disabled = true;
         const originalButtonHTML = captureBtn.innerHTML;
         captureBtn.innerHTML = '<span style="font-size:20px;">⏳</span>';
 
-        /* Keep the UI responsive; this is intentionally NOT showProcessing(). */
-        await new Promise(function(resolve){
-            if(window.requestAnimationFrame){
-                requestAnimationFrame(function(){ requestAnimationFrame(resolve); });
-            }else{
-                setTimeout(resolve,0);
+        const track = stream.getVideoTracks()[0];
+        let nativeBlob = null;
+
+        if(track && "ImageCapture" in window){
+            try{
+                const imageCapture = new ImageCapture(track);
+
+                /*
+                 * takePhoto() is handled by the camera implementation rather
+                 * than by a large canvas encode in JavaScript.
+                 */
+                nativeBlob = await imageCapture.takePhoto();
+
+                if(!nativeBlob || !nativeBlob.size){
+                    nativeBlob = null;
+                }
+            }catch(nativeError){
+                console.warn("Native still capture unavailable; using video-frame fallback.", nativeError);
             }
-        });
-
-        const fullCanvas = createFullVideoCanvas();
-
-        /*
-         * Limit the AI source to 1600px on the longest side.
-         * This is still high enough for good hair/shoulder segmentation,
-         * but is much faster to encode and upload on Android.
-         */
-        const maxAI = 1280;
-        const fw = fullCanvas.width;
-        const fh = fullCanvas.height;
-        const scale = Math.min(1, maxAI / Math.max(fw,fh));
-        const aiCanvas = document.createElement("canvas");
-        aiCanvas.width = Math.max(1,Math.round(fw * scale));
-        aiCanvas.height = Math.max(1,Math.round(fh * scale));
-        const aiCtx = aiCanvas.getContext("2d",{alpha:false});
-        aiCtx.imageSmoothingEnabled = true;
-        aiCtx.imageSmoothingQuality = "high";
-        aiCtx.drawImage(fullCanvas,0,0,aiCanvas.width,aiCanvas.height);
-
-        /* JPEG is dramatically cheaper than full-resolution PNG on phones. */
-        fullResolutionBlob = await canvasToBlob(
-            aiCanvas,
-            "image/jpeg",
-            0.88
-        );
-
-        /* Small display/export preview. */
-        const finalCanvas = cropToIDPhoto(fullCanvas);
-        const previewBlob = await canvasToBlob(
-            finalCanvas,
-            "image/png"
-        );
-
-        if(!previewBlob){
-            throw new Error("Unable to create photo.");
         }
 
-        originalBlob = previewBlob;
-        capturedBlob = previewBlob;
+        /*
+         * Compatibility fallback for browsers without ImageCapture.
+         * This is intentionally limited to the camera's current resolution.
+         */
+        if(!nativeBlob){
+            const fallbackCanvas = createFullVideoCanvas();
+            nativeBlob = await canvasToBlob(
+                fallbackCanvas,
+                "image/jpeg",
+                0.86
+            );
+        }
+
+        if(!nativeBlob || !nativeBlob.size){
+            throw new Error("The camera did not return a photo.");
+        }
+
+        /*
+         * IMPORTANT:
+         * Keep the native photo as the AI source. No resize, PNG encoding,
+         * or 350x450 processing happens before the preview screen appears.
+         */
+        fullResolutionBlob = nativeBlob;
+        originalCaptureSourceBlob = nativeBlob;
+        originalIDPhotoReady = false;
+        originalBlob = nativeBlob;
+        capturedBlob = nativeBlob;
+        transparentBlob = null;
+        whiteBlob = null;
 
         if(capturedURL){
             URL.revokeObjectURL(capturedURL);
         }
 
-        capturedURL = URL.createObjectURL(previewBlob);
-        previewImage.src = capturedURL;
+        capturedURL = URL.createObjectURL(nativeBlob);
 
-        transparentBlob = null;
-        whiteBlob = null;
+        /*
+         * Show the photo immediately. CSS performs the same front-camera
+         * mirror the live camera used, so the user sees the familiar view.
+         * The actual saved/AI source remains the native camera image.
+         */
+        previewImage.style.transform =
+            currentFacing === "user"
+                ? "scaleX(-1)"
+                : "none";
+
+        previewImage.src = capturedURL;
 
         photoWrapper.classList.remove("transparent");
         previewStatus.textContent = "ORIGINAL PHOTO";
@@ -2054,10 +2064,24 @@ async function capturePhoto(){
         cameraScreen.classList.add("hidden");
         previewScreen.classList.remove("hidden");
 
+        /*
+         * Camera is stopped only after the preview is visible.
+         * This makes the shutter feel instant on Android.
+         */
         stopCamera();
 
         captureBtn.disabled = false;
         captureBtn.innerHTML = originalButtonHTML;
+
+        /*
+         * Prepare the exact 350x450 original in the background.
+         * This is deliberately done AFTER the preview is already visible.
+         * If the user immediately taps Remove Background, the native photo
+         * is still available and can be sent directly to Bria.
+         */
+        prepareOriginalIDPhoto(nativeBlob).catch(function(error){
+            console.warn("Background preparation of original ID photo failed:", error);
+        });
 
     }catch(error){
         console.error("Capture error:",error);
@@ -2071,6 +2095,110 @@ async function capturePhoto(){
         captureBtn.innerHTML = '<span style="font-size:16px;">📸</span>';
     }
 }
+
+/*
+ * Creates the exact 350x450 original after the camera preview is already
+ * visible. This keeps expensive image decoding/resampling out of the
+ * shutter-critical path.
+ */
+async function prepareOriginalIDPhoto(blob){
+    if(!blob) return;
+
+    try{
+        const image = await loadImageFromBlob(blob);
+
+        const sourceWidth =
+            image.naturalWidth || image.width;
+
+        const sourceHeight =
+            image.naturalHeight || image.height;
+
+        if(!sourceWidth || !sourceHeight){
+            return;
+        }
+
+        const targetRatio =
+            OUTPUT_WIDTH / OUTPUT_HEIGHT;
+
+        const sourceRatio =
+            sourceWidth / sourceHeight;
+
+        let cropWidth;
+        let cropHeight;
+        let cropX;
+        let cropY;
+
+        if(sourceRatio > targetRatio){
+            cropHeight = sourceHeight;
+            cropWidth = sourceHeight * targetRatio;
+            cropX = (sourceWidth - cropWidth) / 2;
+            cropY = 0;
+        }else{
+            cropWidth = sourceWidth;
+            cropHeight = sourceWidth / targetRatio;
+            cropX = 0;
+            cropY = (sourceHeight - cropHeight) / 2;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = OUTPUT_WIDTH;
+        canvas.height = OUTPUT_HEIGHT;
+
+        const ctx = canvas.getContext("2d",{alpha:false});
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+
+        /*
+         * Preserve the existing front-camera behavior in the final
+         * downloadable original by mirroring only this tiny 350x450 canvas.
+         */
+        if(currentFacing === "user"){
+            ctx.translate(OUTPUT_WIDTH,0);
+            ctx.scale(-1,1);
+        }
+
+        ctx.drawImage(
+            image,
+            cropX,
+            cropY,
+            cropWidth,
+            cropHeight,
+            0,
+            0,
+            OUTPUT_WIDTH,
+            OUTPUT_HEIGHT
+        );
+
+        const preparedBlob =
+            await canvasToBlob(
+                canvas,
+                "image/png"
+            );
+
+        if(preparedBlob){
+            originalIDPhotoReady = true;
+            originalBlob = preparedBlob;
+
+            /*
+             * Do not replace the live preview if background removal has
+             * already started or completed.
+             */
+            if(!transparentBlob && capturedBlob === blob){
+                capturedBlob = preparedBlob;
+
+                if(capturedURL){
+                    URL.revokeObjectURL(capturedURL);
+                }
+
+                capturedURL = URL.createObjectURL(preparedBlob);
+                previewImage.src = capturedURL;
+            }
+        }
+    }catch(error){
+        console.warn("Unable to prepare 350x450 original:",error);
+    }
+}
+
 /* =========================================================
    REMOVE BACKGROUND - HIGH QUALITY AI
    ========================================================= */
@@ -3085,10 +3213,14 @@ async function retakePhoto(){
     fullResolutionBlob = null;
     transparentBlob = null;
     whiteBlob = null;
+    originalIDPhotoReady = false;
+    originalCaptureSourceBlob = null;
 
     previewImage.removeAttribute(
         "src"
     );
+
+    previewImage.style.transform = "none";
 
     photoWrapper.classList.remove(
         "transparent"
