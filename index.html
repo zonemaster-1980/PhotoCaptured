@@ -313,17 +313,16 @@ body{
 .photo-guide{
     position:absolute;
     width:min(78vw,350px);
-    aspect-ratio:7 / 9;
-    border:3px solid rgba(255,255,255,.9);
-    border-radius:8px;
+    aspect-ratio:1 / 1;
+    border:none;
+    border-radius:0;
     pointer-events:none;
-    box-shadow:
-        0 0 0 9999px rgba(0,0,0,.45);
+    box-shadow:none;
 }
 
 .guide-label{
     position:absolute;
-    bottom:calc(50% - min(78vw,350px) * 9 / 14 - 30px);
+    bottom:calc(50% - min(78vw,350px) / 2 - 30px);
     left:50%;
     transform:translateX(-50%);
     background:rgba(0,0,0,.65);
@@ -332,6 +331,84 @@ body{
     font-size:10px;
     color:#fff;
     white-space:nowrap;
+}
+
+
+/* =========================================================
+   CAMERA ZOOM
+   ========================================================= */
+
+.zoom-controls{
+    position:absolute;
+    top:12px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:25;
+    display:flex;
+    align-items:center;
+    gap:5px;
+    padding:5px;
+    border:1px solid rgba(255,255,255,.22);
+    border-radius:12px;
+    background:rgba(8,11,13,.72);
+    backdrop-filter:blur(8px);
+    pointer-events:auto;
+}
+
+.zoom-btn{
+    min-width:43px;
+    height:34px;
+    padding:0 8px;
+    border:1px solid transparent;
+    border-radius:8px;
+    background:transparent;
+    color:#fff;
+    font-size:11px;
+    font-weight:900;
+    cursor:pointer;
+}
+
+.zoom-btn.active{
+    background:#38cef3;
+    color:#071014;
+}
+
+.zoom-btn:disabled{
+    opacity:.35;
+    cursor:default;
+}
+
+.zoom-readout{
+    min-width:38px;
+    text-align:center;
+    color:#fff;
+    font-size:11px;
+    font-weight:900;
+}
+
+#video{
+    transform-origin:center center;
+    transition:transform .12s ease;
+}
+
+@media(max-width:380px){
+    .zoom-controls{
+        top:8px;
+        gap:3px;
+        padding:4px;
+    }
+
+    .zoom-btn{
+        min-width:38px;
+        height:32px;
+        padding:0 5px;
+        font-size:10px;
+    }
+
+    .zoom-readout{
+        min-width:34px;
+        font-size:10px;
+    }
 }
 
 /* =========================================================
@@ -455,7 +532,7 @@ body{
 .photo-wrapper{
     position:relative;
     width:min(78vw,350px);
-    aspect-ratio:7 / 9;
+    aspect-ratio:1 / 1;
     background:#fff;
     border-radius:10px;
     overflow:hidden;
@@ -899,7 +976,7 @@ body{
             </div>
 
             <div class="camera-label">
-                Position face and shoulders inside the frame
+                Position face and shoulders inside the square frame
             </div>
 
         </div>
@@ -922,13 +999,20 @@ body{
             muted>
         </video>
 
+        <div class="zoom-controls" aria-label="Camera zoom">
+            <button id="zoomOutBtn" class="zoom-btn" type="button">−</button>
+            <div id="zoomReadout" class="zoom-readout">1.0×</div>
+            <button id="zoomInBtn" class="zoom-btn" type="button">+</button>
+        </div>
+
+
         <div
             id="photoGuide"
             class="photo-guide">
         </div>
 
         <div class="guide-label">
-            7 : 9 PHOTO AREA
+            1 : 1 PHOTO AREA
         </div>
 
     </div>
@@ -1137,7 +1221,7 @@ body{
    CONFIGURATION
    ========================================================= */
 
-const OUTPUT_WIDTH = 350;
+const OUTPUT_WIDTH = 450;
 const OUTPUT_HEIGHT = 450;
 
 
@@ -1182,6 +1266,15 @@ const cameraSelect =
 
 const video =
     document.getElementById("video");
+
+const zoomOutBtn =
+    document.getElementById("zoomOutBtn");
+
+const zoomInBtn =
+    document.getElementById("zoomInBtn");
+
+const zoomReadout =
+    document.getElementById("zoomReadout");
 
 const previewImage =
     document.getElementById("previewImage");
@@ -1240,6 +1333,16 @@ let stream = null;
 let cameras = [];
 let currentCameraIndex = 0;
 let currentFacing = "user";
+
+/* Camera zoom: use real camera zoom when Android exposes it.
+ * If hardware zoom is unavailable, the same zoom level is applied
+ * digitally and the captured image is cropped to match the preview.
+ */
+let cameraZoom = 1;
+const ZOOM_LEVELS = [1, 1.5, 2, 2.5, 3];
+let hardwareZoomSupported = false;
+let hardwareZoomMax = 1;
+let hardwareZoomMin = 1;
 
 let studentIDValue = "";
 
@@ -1566,6 +1669,178 @@ async function runBackgroundRemoval(blob){
 }
 
 /* =========================================================
+   CAMERA ZOOM
+   ========================================================= */
+
+function getVideoTrack(){
+    if(!stream) return null;
+    return stream.getVideoTracks()[0] || null;
+}
+
+function updateZoomUI(){
+    if(zoomOutBtn) zoomOutBtn.dataset.zoom = String(cameraZoom);
+    if(zoomInBtn) zoomInBtn.dataset.zoom = String(cameraZoom);
+
+    if(zoomReadout){
+        zoomReadout.textContent = cameraZoom.toFixed(1) + "×";
+    }
+
+    if(zoomOutBtn){
+        zoomOutBtn.disabled = cameraZoom <= ZOOM_LEVELS[0];
+    }
+
+    if(zoomInBtn){
+        zoomInBtn.disabled = cameraZoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
+    }
+
+    if(zoomReadout){
+        zoomReadout.setAttribute("aria-label","Zoom " + cameraZoom.toFixed(1) + " times");
+    }
+}
+
+async function detectHardwareZoom(){
+    const track = getVideoTrack();
+
+    hardwareZoomSupported = false;
+    hardwareZoomMax = 1;
+    hardwareZoomMin = 1;
+
+    if(!track || !track.getCapabilities) return;
+
+    try{
+        const capabilities = track.getCapabilities();
+
+        if(
+            capabilities &&
+            typeof capabilities.zoom === "object" &&
+            Number.isFinite(capabilities.zoom.max)
+        ){
+            hardwareZoomSupported = true;
+            hardwareZoomMax = Number(capabilities.zoom.max) || 1;
+            hardwareZoomMin = Number(capabilities.zoom.min) || 1;
+        }
+    }catch(error){
+        console.warn("Unable to detect camera zoom capability:", error);
+    }
+}
+
+function applyDigitalZoomPreview(){
+    if(!video) return;
+
+    /*
+     * When hardware zoom is unavailable, scale the live preview.
+     * The capture path below crops the saved image by the same factor.
+     */
+    if(hardwareZoomSupported){
+        video.style.transform = "none";
+    }else{
+        const scale = Math.max(1, cameraZoom);
+        video.style.transform =
+            (currentFacing === "user" ? "scaleX(-1) " : "") +
+            "scale(" + scale + ")";
+    }
+}
+
+async function setCameraZoom(level){
+    const requested = Number(level);
+    if(!Number.isFinite(requested)) return;
+
+    const nearest = ZOOM_LEVELS.reduce(function(best,current){
+        return Math.abs(current - requested) < Math.abs(best - requested)
+            ? current
+            : best;
+    }, ZOOM_LEVELS[0]);
+
+    cameraZoom = Math.max(
+        ZOOM_LEVELS[0],
+        Math.min(ZOOM_LEVELS[ZOOM_LEVELS.length - 1], nearest)
+    );
+
+    const track = getVideoTrack();
+
+    if(hardwareZoomSupported && track && track.applyConstraints){
+        const hardwareValue = Math.max(
+            hardwareZoomMin,
+            Math.min(hardwareZoomMax, cameraZoom)
+        );
+
+        try{
+            await track.applyConstraints({
+                advanced:[{zoom:hardwareValue}]
+            });
+        }catch(error){
+            console.warn("Hardware zoom failed; using digital zoom fallback.", error);
+            hardwareZoomSupported = false;
+        }
+    }
+
+    applyDigitalZoomPreview();
+    updateZoomUI();
+}
+
+async function changeZoom(direction){
+    const index = ZOOM_LEVELS.indexOf(cameraZoom);
+    const nextIndex = Math.max(
+        0,
+        Math.min(
+            ZOOM_LEVELS.length - 1,
+            index + direction
+        )
+    );
+
+    await setCameraZoom(ZOOM_LEVELS[nextIndex]);
+}
+
+/*
+ * Crops a full-resolution camera image around its center to match
+ * the digital zoom shown in the live preview.
+ */
+async function cropBlobForZoom(blob){
+    if(!blob || cameraZoom <= 1 || hardwareZoomSupported){
+        return blob;
+    }
+
+    const image = await loadImageFromBlob(blob);
+
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+
+    if(!width || !height) return blob;
+
+    const cropWidth = width / cameraZoom;
+    const cropHeight = height / cameraZoom;
+    const cropX = (width - cropWidth) / 2;
+    const cropY = (height - cropHeight) / 2;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(cropWidth));
+    canvas.height = Math.max(1, Math.round(cropHeight));
+
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    if(currentFacing === "user"){
+        ctx.translate(canvas.width,0);
+        ctx.scale(-1,1);
+    }
+
+    ctx.drawImage(
+        image,
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    return await canvasToBlob(canvas,"image/jpeg",0.94);
+}
+
+/* =========================================================
    START CAMERA
    ========================================================= */
 
@@ -1625,6 +1900,9 @@ async function startCamera(deviceId=null){
             stream;
 
         await video.play();
+
+        await detectHardwareZoom();
+        await setCameraZoom(cameraZoom);
 
         await updateCameraList();
 
@@ -1784,6 +2062,8 @@ async function switchCamera(){
                 currentCameraIndex
             ].deviceId
         );
+
+        await setCameraZoom(cameraZoom);
 
     }else{
 
@@ -2020,15 +2300,22 @@ async function capturePhoto(){
         }
 
         /*
-         * IMPORTANT:
-         * Keep the native photo as the AI source. No resize, PNG encoding,
-         * or 350x450 processing happens before the preview screen appears.
+         * If the camera does not expose a hardware zoom control, crop the
+         * native full-resolution photo so the saved image matches the
+         * zoom level the user saw on screen.
          */
-        fullResolutionBlob = nativeBlob;
-        originalCaptureSourceBlob = nativeBlob;
+        const zoomedBlob =
+            await cropBlobForZoom(nativeBlob);
+
+        /*
+         * IMPORTANT:
+         * Keep the highest-quality available zoomed image as the AI source.
+         */
+        fullResolutionBlob = zoomedBlob;
+        originalCaptureSourceBlob = zoomedBlob;
         originalIDPhotoReady = false;
-        originalBlob = nativeBlob;
-        capturedBlob = nativeBlob;
+        originalBlob = zoomedBlob;
+        capturedBlob = zoomedBlob;
         transparentBlob = null;
         whiteBlob = null;
 
@@ -2036,7 +2323,7 @@ async function capturePhoto(){
             URL.revokeObjectURL(capturedURL);
         }
 
-        capturedURL = URL.createObjectURL(nativeBlob);
+        capturedURL = URL.createObjectURL(zoomedBlob);
 
         /*
          * Show the photo immediately. CSS performs the same front-camera
@@ -3326,6 +3613,26 @@ if(aiSettingsBtn){
 /* =========================================================
    BUTTON EVENTS
    ========================================================= */
+
+if(zoomOutBtn){
+    zoomOutBtn.addEventListener(
+        "click",
+        function(){
+            changeZoom(-1);
+        }
+    );
+}
+
+if(zoomInBtn){
+    zoomInBtn.addEventListener(
+        "click",
+        function(){
+            changeZoom(1);
+        }
+    );
+}
+
+updateZoomUI();
 
 captureBtn.addEventListener(
     "click",
