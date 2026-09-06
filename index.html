@@ -877,8 +877,6 @@ body{
 
 }
 
-
-
 </style>
 
 </head>
@@ -1018,7 +1016,9 @@ body{
         </div>
 
     </div>
-<div class="camera-controls">
+
+
+    <div class="camera-controls">
 
         <button
             id="captureBtn"
@@ -1091,10 +1091,63 @@ body{
         </div>
 
     </div>
-<!-- ACTIONS -->
+
+
+    <!-- BACKGROUND OPTIONS -->
+
+    <div
+        id="backgroundOptions"
+        class="background-options">
+
+        <button
+            id="transparentBtn"
+            class="active">
+
+            TRANSPARENT
+
+        </button>
+
+        <button
+            id="whiteOptionBtn">
+
+            WHITE BACKGROUND
+
+        </button>
+
+    </div>
+
+
+    <!-- ACTIONS -->
 
     <div class="actions">
-<!-- DOWNLOAD NOW ALSO OPENS PORTAL -->
+
+        <button
+            id="aiSettingsBtn"
+            class="action-btn ai-settings-btn"
+            type="button"
+            title="Configure cloud background-removal API token">
+            ⚙ AI TOKEN SETTINGS
+        </button>
+
+        <button
+            id="removeBgBtn"
+            class="action-btn remove-bg-btn">
+
+            ✨ REMOVE BACKGROUND
+
+        </button>
+
+
+        <button
+            id="whiteBgBtn"
+            class="action-btn white-bg-btn">
+
+            ⬜ WHITE BACKGROUND
+
+        </button>
+
+
+        <!-- DOWNLOAD NOW ALSO OPENS PORTAL -->
 
         <button
             id="downloadBtn"
@@ -1130,7 +1183,17 @@ body{
 
 </div>
 
+<!-- CLOUD AI TOKEN MODAL IS CREATED ON DEMAND BY JAVASCRIPT -->
 
+<!-- PROCESSING OVERLAY -->
+
+<div
+    id="processing"
+    class="processing">
+
+<div class="processing-box">
+
+    <div class="spinner"></div>
 
     <div
         id="processingTitle"
@@ -1219,6 +1282,12 @@ const previewImage =
 const photoWrapper =
     document.getElementById("photoWrapper");
 
+const removeBgBtn =
+    document.getElementById("removeBgBtn");
+
+const whiteBgBtn =
+    document.getElementById("whiteBgBtn");
+
 const downloadBtn =
     document.getElementById("downloadBtn");
 
@@ -1227,6 +1296,15 @@ const uploadPortalBtn =
 
 const retakeBtn =
     document.getElementById("retakeBtn");
+
+const backgroundOptions =
+    document.getElementById("backgroundOptions");
+
+const transparentBtn =
+    document.getElementById("transparentBtn");
+
+const whiteOptionBtn =
+    document.getElementById("whiteOptionBtn");
 
 const processing =
     document.getElementById("processing");
@@ -1334,12 +1412,22 @@ function ensureAITokenModal(){
     modal.id = "aiTokenModal";
     modal.className = "ai-token-modal";
     modal.innerHTML = `
-        
-            
-            
-                
+        <div class="ai-token-box" role="dialog" aria-modal="true" aria-labelledby="aiTokenTitle">
+            <div id="aiTokenTitle" class="ai-token-title">Cloud AI Background Removal</div>
+            <div class="ai-token-text">
+                Enter your Bria API token. Your photo is processed in the cloud,
+                so Android does not need to load a large AI model locally.
+                The token is stored only in this browser.
             </div>
-            
+            <input id="aiTokenInput" class="ai-token-input" type="password"
+                   autocomplete="off" spellcheck="false" placeholder="Enter Bria API token">
+            <div class="ai-token-actions">
+                <button id="aiTokenCancel" type="button">CANCEL</button>
+                <button id="aiTokenSave" class="ai-token-save" type="button">SAVE TOKEN</button>
+            </div>
+            <a class="ai-token-link" href="https://platform.bria.ai/" target="_blank" rel="noopener">
+                CREATE / MANAGE BRIA API TOKEN
+            </a>
         </div>`;
     document.body.appendChild(modal);
 }
@@ -2218,10 +2306,6 @@ async function capturePhoto(){
          */
         const zoomedBlob =
             await cropBlobForZoom(nativeBlob);
-            // Start automatic background removal after the original photo is visible.
-            // The processed transparent PNG becomes the active photo automatically.
-            autoProcessCapturedPhoto(zoomedBlob).catch(console.error);
-        processAndDownloadCapturedPhoto(zoomedBlob).catch(console.error);
 
         /*
          * IMPORTANT:
@@ -2256,6 +2340,12 @@ async function capturePhoto(){
         photoWrapper.classList.remove("transparent");
         previewStatus.textContent = "ORIGINAL PHOTO";
 
+        removeBgBtn.style.display = "block";
+        removeBgBtn.disabled = false;
+        removeBgBtn.textContent = "✨ REMOVE BACKGROUND";
+
+        whiteBgBtn.style.display = "none";
+        backgroundOptions.style.display = "none";
         uploadPortalBtn.style.display = "block";
 
         cameraScreen.classList.add("hidden");
@@ -2411,6 +2501,12 @@ async function removeBackground(){
 
     try{
 
+        removeBgBtn.disabled =
+            true;
+
+        removeBgBtn.textContent =
+            "⏳ PROCESSING...";
+
         showProcessing(
             "Removing Background",
             "Cloud AI is preparing your photo..."
@@ -2487,6 +2583,26 @@ async function removeBackground(){
         previewStatus.textContent =
             "BACKGROUND REMOVED • BRIA CLOUD AI";
 
+        backgroundOptions.style.display =
+            "grid";
+
+        whiteBgBtn.style.display =
+            "block";
+
+        transparentBtn.classList.add(
+            "active"
+        );
+
+        whiteOptionBtn.classList.remove(
+            "active"
+        );
+
+        removeBgBtn.textContent =
+            "✓ BACKGROUND REMOVED";
+
+        removeBgBtn.disabled =
+            true;
+
         hideProcessing();
 
     }catch(error){
@@ -2519,6 +2635,12 @@ async function removeBackground(){
         }
 
         alert(message);
+
+        removeBgBtn.disabled =
+            false;
+
+        removeBgBtn.textContent =
+            "✨ REMOVE BACKGROUND";
 
     }
 
@@ -3014,6 +3136,14 @@ async function applyWhiteBackground(){
         previewStatus.textContent =
             "WHITE BACKGROUND";
 
+        transparentBtn.classList.remove(
+            "active"
+        );
+
+        whiteOptionBtn.classList.add(
+            "active"
+        );
+
         hideProcessing();
 
     }catch(error){
@@ -3068,6 +3198,14 @@ function showTransparent(){
 
     previewStatus.textContent =
         "BACKGROUND REMOVED";
+
+    transparentBtn.classList.add(
+        "active"
+    );
+
+    whiteOptionBtn.classList.remove(
+        "active"
+    );
 
 }
 
@@ -3378,6 +3516,15 @@ async function retakePhoto(){
     previewStatus.textContent =
         "ORIGINAL PHOTO";
 
+    removeBgBtn.style.display =
+        "none";
+
+    whiteBgBtn.style.display =
+        "none";
+
+    backgroundOptions.style.display =
+        "none";
+
     previewScreen.classList.add(
         "hidden"
     );
@@ -3422,6 +3569,15 @@ startBtn.addEventListener(
 
         previewStudent.textContent =
             "ID: " + studentIDValue;
+
+        removeBgBtn.style.display =
+            "none";
+
+        whiteBgBtn.style.display =
+            "none";
+
+        backgroundOptions.style.display =
+            "none";
 
         uploadPortalBtn.style.display =
             "block";
@@ -3488,6 +3644,26 @@ switchCameraBtn.addEventListener(
     switchCamera
 );
 
+removeBgBtn.addEventListener(
+    "click",
+    removeBackground
+);
+
+whiteBgBtn.addEventListener(
+    "click",
+    applyWhiteBackground
+);
+
+transparentBtn.addEventListener(
+    "click",
+    showTransparent
+);
+
+whiteOptionBtn.addEventListener(
+    "click",
+    applyWhiteBackground
+);
+
 downloadBtn.addEventListener(
     "click",
     downloadPhoto
@@ -3550,153 +3726,9 @@ document.addEventListener(
 window.addEventListener(
     "load",
     function(){
-        /* Background removal is loaded automatically after capture. */
+        /* The cloud AI client is loaded on demand when Remove Background is pressed. */
     }
 );
-
-
-
-
-
-/* =========================
-   LOCAL AUTOMATIC BG REMOVAL
-   =========================
-   Uses MediaPipe Image Segmenter in the browser.
-   No API key / token / backend is required.
-*/
-let localBgSegmenter = null;
-let localBgModelPromise = null;
-
-async function loadLocalBackgroundRemover() {
-    if (localBgSegmenter) return localBgSegmenter;
-    if (localBgModelPromise) return localBgModelPromise;
-
-    localBgModelPromise = (async () => {
-        const visionModule = await import(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm"
-        );
-
-        const { FilesetResolver, ImageSegmenter } = visionModule;
-
-        const wasm = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
-        );
-
-        const segmenter = await ImageSegmenter.createFromOptions(wasm, {
-            baseOptions: {
-                modelAssetPath:
-                    "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite",
-                delegate: "GPU"
-            },
-            runningMode: "IMAGE",
-            outputCategoryMask: true,
-            outputConfidenceMasks: false
-        });
-
-        localBgSegmenter = segmenter;
-        return segmenter;
-    })();
-
-    return localBgModelPromise;
-}
-
-async function removeBackgroundLocally(blob) {
-    const segmenter = await loadLocalBackgroundRemover();
-
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(bitmap, 0, 0);
-
-    const result = segmenter.segment(canvas);
-    const mask = result.categoryMask;
-    const maskData = mask.getAsUint8Array();
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const pixels = imageData.data;
-
-    // Selfie segmenter category 0 is background; foreground is non-zero.
-    // Feather the edge slightly to reduce a harsh cutout.
-    for (let i = 0, p = 0; i < maskData.length; i++, p += 4) {
-        const m = maskData[i];
-        let alpha;
-
-        if (m === 0) {
-            alpha = 0;
-        } else if (m < 32) {
-            alpha = Math.round((m / 32) * 255);
-        } else {
-            alpha = 255;
-        }
-
-        pixels[p + 3] = Math.min(pixels[p + 3], alpha);
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-
-    const output = await new Promise((resolve, reject) => {
-        canvas.toBlob(
-            b => b ? resolve(b) : reject(new Error("Could not create PNG")),
-            "image/png"
-        );
-    });
-
-    bitmap.close();
-    if (mask && typeof mask.close === "function") mask.close();
-    if (result && typeof result.close === "function") result.close();
-
-    return output;
-}
-
-async function autoProcessCapturedPhoto(blob) {
-    try {
-        if (typeof setStatus === "function") {
-            setStatus("Removing background…");
-        }
-
-        const processed = await removeBackgroundLocally(blob);
-
-        // Keep the existing filename if the app already defines one.
-        let baseName = "DJIS_ID_Photo";
-        const candidates = [
-            window.currentFilename,
-            window.outputFilename,
-            window.photoFilename,
-            window.fileName
-        ];
-
-        for (const value of candidates) {
-            if (typeof value === "string" && value.trim()) {
-                baseName = value.trim().replace(/\.[^.]+$/, "");
-                break;
-            }
-        }
-
-        const url = URL.createObjectURL(processed);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${baseName}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 3000);
-
-        if (typeof setStatus === "function") {
-            setStatus("Background removed — PNG downloaded.");
-        }
-
-        return processed;
-    } catch (error) {
-        console.error("Local background removal failed:", error);
-        if (typeof setStatus === "function") {
-            setStatus("Background removal failed. Check your internet connection and try again.");
-        }
-        return null;
-    }
-}
 
 </script>
 
