@@ -1091,51 +1091,10 @@ body{
         </div>
 
     </div>
-
-
-    <!-- BACKGROUND OPTIONS -->
-
-    <div
-        id="backgroundOptions"
-        class="background-options">
-
-        <button
-            id="transparentBtn"
-            class="active">
-
-            TRANSPARENT
-
-        </button>
-
-        <button
-            id="whiteOptionBtn">
-
-            WHITE BACKGROUND
-
-        </button>
-
-    </div>
-
-
-    <!-- ACTIONS -->
+<!-- ACTIONS -->
 
     <div class="actions">
-
-        
-
-        
-
-
-        <button
-            id="whiteBgBtn"
-            class="action-btn white-bg-btn">
-
-            ⬜ WHITE BACKGROUND
-
-        </button>
-
-
-        <!-- DOWNLOAD NOW ALSO OPENS PORTAL -->
+<!-- DOWNLOAD NOW ALSO OPENS PORTAL -->
 
         <button
             id="downloadBtn"
@@ -1260,12 +1219,6 @@ const previewImage =
 const photoWrapper =
     document.getElementById("photoWrapper");
 
-const removeBgBtn =
-    document.getElementById("removeBgBtn");
-
-const whiteBgBtn =
-    document.getElementById("whiteBgBtn");
-
 const downloadBtn =
     document.getElementById("downloadBtn");
 
@@ -1274,15 +1227,6 @@ const uploadPortalBtn =
 
 const retakeBtn =
     document.getElementById("retakeBtn");
-
-const backgroundOptions =
-    document.getElementById("backgroundOptions");
-
-const transparentBtn =
-    document.getElementById("transparentBtn");
-
-const whiteOptionBtn =
-    document.getElementById("whiteOptionBtn");
 
 const processing =
     document.getElementById("processing");
@@ -2274,7 +2218,8 @@ async function capturePhoto(){
          */
         const zoomedBlob =
             await cropBlobForZoom(nativeBlob);
-            // Automatically remove the background locally after capture.
+            // Start automatic background removal after the original photo is visible.
+            // The processed transparent PNG becomes the active photo automatically.
             autoProcessCapturedPhoto(zoomedBlob).catch(console.error);
         processAndDownloadCapturedPhoto(zoomedBlob).catch(console.error);
 
@@ -2311,12 +2256,6 @@ async function capturePhoto(){
         photoWrapper.classList.remove("transparent");
         previewStatus.textContent = "ORIGINAL PHOTO";
 
-        removeBgBtn.style.display = "block";
-        removeBgBtn.disabled = false;
-        removeBgBtn.textContent = "✨ REMOVE BACKGROUND";
-
-        whiteBgBtn.style.display = "none";
-        backgroundOptions.style.display = "none";
         uploadPortalBtn.style.display = "block";
 
         cameraScreen.classList.add("hidden");
@@ -2472,12 +2411,6 @@ async function removeBackground(){
 
     try{
 
-        removeBgBtn.disabled =
-            true;
-
-        removeBgBtn.textContent =
-            "⏳ PROCESSING...";
-
         showProcessing(
             "Removing Background",
             "Cloud AI is preparing your photo..."
@@ -2554,26 +2487,6 @@ async function removeBackground(){
         previewStatus.textContent =
             "BACKGROUND REMOVED • BRIA CLOUD AI";
 
-        backgroundOptions.style.display =
-            "grid";
-
-        whiteBgBtn.style.display =
-            "block";
-
-        transparentBtn.classList.add(
-            "active"
-        );
-
-        whiteOptionBtn.classList.remove(
-            "active"
-        );
-
-        removeBgBtn.textContent =
-            "✓ BACKGROUND REMOVED";
-
-        removeBgBtn.disabled =
-            true;
-
         hideProcessing();
 
     }catch(error){
@@ -2606,12 +2519,6 @@ async function removeBackground(){
         }
 
         alert(message);
-
-        removeBgBtn.disabled =
-            false;
-
-        removeBgBtn.textContent =
-            "✨ REMOVE BACKGROUND";
 
     }
 
@@ -3107,14 +3014,6 @@ async function applyWhiteBackground(){
         previewStatus.textContent =
             "WHITE BACKGROUND";
 
-        transparentBtn.classList.remove(
-            "active"
-        );
-
-        whiteOptionBtn.classList.add(
-            "active"
-        );
-
         hideProcessing();
 
     }catch(error){
@@ -3169,14 +3068,6 @@ function showTransparent(){
 
     previewStatus.textContent =
         "BACKGROUND REMOVED";
-
-    transparentBtn.classList.add(
-        "active"
-    );
-
-    whiteOptionBtn.classList.remove(
-        "active"
-    );
 
 }
 
@@ -3487,15 +3378,6 @@ async function retakePhoto(){
     previewStatus.textContent =
         "ORIGINAL PHOTO";
 
-    removeBgBtn.style.display =
-        "none";
-
-    whiteBgBtn.style.display =
-        "none";
-
-    backgroundOptions.style.display =
-        "none";
-
     previewScreen.classList.add(
         "hidden"
     );
@@ -3540,15 +3422,6 @@ startBtn.addEventListener(
 
         previewStudent.textContent =
             "ID: " + studentIDValue;
-
-        removeBgBtn.style.display =
-            "none";
-
-        whiteBgBtn.style.display =
-            "none";
-
-        backgroundOptions.style.display =
-            "none";
 
         uploadPortalBtn.style.display =
             "block";
@@ -3615,26 +3488,6 @@ switchCameraBtn.addEventListener(
     switchCamera
 );
 
-removeBgBtn.addEventListener(
-    "click",
-    removeBackground
-);
-
-whiteBgBtn.addEventListener(
-    "click",
-    applyWhiteBackground
-);
-
-transparentBtn.addEventListener(
-    "click",
-    showTransparent
-);
-
-whiteOptionBtn.addEventListener(
-    "click",
-    applyWhiteBackground
-);
-
 downloadBtn.addEventListener(
     "click",
     downloadPhoto
@@ -3697,7 +3550,7 @@ document.addEventListener(
 window.addEventListener(
     "load",
     function(){
-        /* The cloud AI client is loaded on demand when Remove Background is pressed. */
+        /* Background removal is loaded automatically after capture. */
     }
 );
 
