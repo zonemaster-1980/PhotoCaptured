@@ -878,41 +878,6 @@ body{
 }
 
 
-/* Automatic background-removal controls */
-.auto-bg-panel{
-    margin-top:10px;
-    padding:12px;
-    border:1px solid rgba(255,255,255,.14);
-    border-radius:12px;
-    background:rgba(10,10,10,.55);
-}
-.auto-bg-row{
-    display:flex;
-    gap:8px;
-    align-items:center;
-    flex-wrap:wrap;
-}
-.auto-bg-row input{
-    flex:1 1 260px;
-    min-width:0;
-    box-sizing:border-box;
-    padding:9px 11px;
-    border-radius:9px;
-    border:1px solid rgba(255,255,255,.18);
-    background:#111;
-    color:#fff;
-}
-.auto-bg-toggle{
-    display:flex;
-    gap:8px;
-    align-items:center;
-    font-size:13px;
-}
-.auto-bg-status{
-    margin-top:8px;
-    font-size:12px;
-    opacity:.85;
-}
 
 </style>
 
@@ -1053,23 +1018,6 @@ body{
         </div>
 
     </div>
-
-
-    
-<div class="auto-bg-panel" id="autoBgPanel">
-    <div class="auto-bg-row">
-        <label class="auto-bg-toggle">
-            <input type="checkbox" id="autoBgEnabled" checked>
-            <span>Auto remove background</span>
-        </label>
-        <input id="autoBgEndpoint" type="url"
-               placeholder="Background-removal server URL">
-    </div>
-    <div id="autoBgStatus" class="auto-bg-status">
-        Set your background-removal server URL to enable automatic processing.
-    </div>
-</div>
-
 <div class="camera-controls">
 
         <button
@@ -1173,21 +1121,9 @@ body{
 
     <div class="actions">
 
-        <button
-            id="aiSettingsBtn"
-            class="action-btn ai-settings-btn"
-            type="button"
-            title="Configure cloud background-removal API token">
-            ⚙ AI TOKEN SETTINGS
-        </button>
+        
 
-        <button
-            id="removeBgBtn"
-            class="action-btn remove-bg-btn">
-
-            ✨ REMOVE BACKGROUND
-
-        </button>
+        
 
 
         <button
@@ -1235,17 +1171,7 @@ body{
 
 </div>
 
-<!-- CLOUD AI TOKEN MODAL IS CREATED ON DEMAND BY JAVASCRIPT -->
 
-<!-- PROCESSING OVERLAY -->
-
-<div
-    id="processing"
-    class="processing">
-
-<div class="processing-box">
-
-    <div class="spinner"></div>
 
     <div
         id="processingTitle"
@@ -1464,22 +1390,12 @@ function ensureAITokenModal(){
     modal.id = "aiTokenModal";
     modal.className = "ai-token-modal";
     modal.innerHTML = `
-        <div class="ai-token-box" role="dialog" aria-modal="true" aria-labelledby="aiTokenTitle">
-            <div id="aiTokenTitle" class="ai-token-title">Cloud AI Background Removal</div>
-            <div class="ai-token-text">
-                Enter your Bria API token. Your photo is processed in the cloud,
-                so Android does not need to load a large AI model locally.
-                The token is stored only in this browser.
+        
+            
+            
+                
             </div>
-            <input id="aiTokenInput" class="ai-token-input" type="password"
-                   autocomplete="off" spellcheck="false" placeholder="Enter Bria API token">
-            <div class="ai-token-actions">
-                <button id="aiTokenCancel" type="button">CANCEL</button>
-                <button id="aiTokenSave" class="ai-token-save" type="button">SAVE TOKEN</button>
-            </div>
-            <a class="ai-token-link" href="https://platform.bria.ai/" target="_blank" rel="noopener">
-                CREATE / MANAGE BRIA API TOKEN
-            </a>
+            
         </div>`;
     document.body.appendChild(modal);
 }
@@ -2358,6 +2274,8 @@ async function capturePhoto(){
          */
         const zoomedBlob =
             await cropBlobForZoom(nativeBlob);
+            // Automatically remove the background locally after capture.
+            autoProcessCapturedPhoto(zoomedBlob).catch(console.error);
         processAndDownloadCapturedPhoto(zoomedBlob).catch(console.error);
 
         /*
@@ -3784,159 +3702,148 @@ window.addEventListener(
 );
 
 
+
+
+
 /* =========================
-   AUTOMATIC BACKGROUND FLOW
-   ========================= */
-
-const AUTO_BG_DEFAULT_ENDPOINT =
-    localStorage.getItem("djis_bg_endpoint") || "";
-
-function getOriginalFilenameBase() {
-    // Use the app's existing filename if one is present.
-    const candidates = [
-        window.currentFilename,
-        window.outputFilename,
-        window.photoFilename,
-        window.fileName
-    ];
-    for (const value of candidates) {
-        if (typeof value === "string" && value.trim()) {
-            return value.trim().replace(/\.[^.]+$/, "");
-        }
-    }
-
-    // Fall back to a timestamped filename.
-    const d = new Date();
-    const pad = n => String(n).padStart(2, "0");
-    return `DJIS_ID_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-}
-
-function setAutoBgStatus(message, error=false) {
-    const el = document.getElementById("autoBgStatus");
-    if (!el) return;
-    el.textContent = message;
-    el.style.opacity = "1";
-    el.style.fontWeight = error ? "600" : "400";
-}
-
-async function blobToFile(blob, filename) {
-    return new File([blob], filename, {
-        type: blob.type || "image/jpeg",
-        lastModified: Date.now()
-    });
-}
-
-/*
-Expected backend contract:
-
-POST <endpoint>
-Content-Type: multipart/form-data
-
-field: image
-field: filename
-
-Response:
-- processed image bytes (image/png preferred), OR
-- JSON: { image: "<data URL>" } or { url: "..." }
-
-The backend is responsible for calling the chosen background-removal service.
-No API key is placed in this HTML file.
+   LOCAL AUTOMATIC BG REMOVAL
+   =========================
+   Uses MediaPipe Image Segmenter in the browser.
+   No API key / token / backend is required.
 */
-async function autoRemoveBackground(blob, originalFilename) {
-    const enabled = document.getElementById("autoBgEnabled")?.checked;
-    const endpoint = document.getElementById("autoBgEndpoint")?.value.trim();
+let localBgSegmenter = null;
+let localBgModelPromise = null;
 
-    if (!enabled || !endpoint) return null;
+async function loadLocalBackgroundRemover() {
+    if (localBgSegmenter) return localBgSegmenter;
+    if (localBgModelPromise) return localBgModelPromise;
 
-    localStorage.setItem("djis_bg_endpoint", endpoint);
-    setAutoBgStatus("Removing background…");
+    localBgModelPromise = (async () => {
+        const visionModule = await import(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm"
+        );
 
-    const inputName = originalFilename.replace(/\.[^.]+$/, "") + ".jpg";
-    const file = await blobToFile(blob, inputName);
+        const { FilesetResolver, ImageSegmenter } = visionModule;
 
-    const form = new FormData();
-    form.append("image", file, inputName);
-    form.append("filename", originalFilename);
+        const wasm = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+        );
 
-    const response = await fetch(endpoint, {
-        method: "POST",
-        body: form
+        const segmenter = await ImageSegmenter.createFromOptions(wasm, {
+            baseOptions: {
+                modelAssetPath:
+                    "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite",
+                delegate: "GPU"
+            },
+            runningMode: "IMAGE",
+            outputCategoryMask: true,
+            outputConfidenceMasks: false
+        });
+
+        localBgSegmenter = segmenter;
+        return segmenter;
+    })();
+
+    return localBgModelPromise;
+}
+
+async function removeBackgroundLocally(blob) {
+    const segmenter = await loadLocalBackgroundRemover();
+
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0);
+
+    const result = segmenter.segment(canvas);
+    const mask = result.categoryMask;
+    const maskData = mask.getAsUint8Array();
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = imageData.data;
+
+    // Selfie segmenter category 0 is background; foreground is non-zero.
+    // Feather the edge slightly to reduce a harsh cutout.
+    for (let i = 0, p = 0; i < maskData.length; i++, p += 4) {
+        const m = maskData[i];
+        let alpha;
+
+        if (m === 0) {
+            alpha = 0;
+        } else if (m < 32) {
+            alpha = Math.round((m / 32) * 255);
+        } else {
+            alpha = 255;
+        }
+
+        pixels[p + 3] = Math.min(pixels[p + 3], alpha);
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const output = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+            b => b ? resolve(b) : reject(new Error("Could not create PNG")),
+            "image/png"
+        );
     });
 
-    if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(`Background server returned ${response.status}${text ? ": " + text.slice(0,180) : ""}`);
-    }
+    bitmap.close();
+    if (mask && typeof mask.close === "function") mask.close();
+    if (result && typeof result.close === "function") result.close();
 
-    const contentType = response.headers.get("content-type") || "";
-
-    if (contentType.includes("application/json")) {
-        const data = await response.json();
-
-        if (data.image) {
-            const r = await fetch(data.image);
-            if (!r.ok) throw new Error("The server returned an invalid image.");
-            return await r.blob();
-        }
-
-        if (data.url) {
-            const r = await fetch(data.url);
-            if (!r.ok) throw new Error("The server returned an invalid image URL.");
-            return await r.blob();
-        }
-
-        throw new Error("Server JSON did not contain image or url.");
-    }
-
-    return await response.blob();
+    return output;
 }
 
-async function downloadBlobWithFilename(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
-
-async function processAndDownloadCapturedPhoto(capturedBlob) {
-    const base = getOriginalFilenameBase();
-    const originalFilename = `${base}.jpg`;
-
+async function autoProcessCapturedPhoto(blob) {
     try {
-        const processed = await autoRemoveBackground(
-            capturedBlob,
-            originalFilename
-        );
+        if (typeof setStatus === "function") {
+            setStatus("Removing background…");
+        }
 
-        if (!processed) return false;
+        const processed = await removeBackgroundLocally(blob);
 
-        const outputFilename = `${base}.png`;
-        await downloadBlobWithFilename(processed, outputFilename);
-        setAutoBgStatus(`Done — downloaded ${outputFilename}`);
-        return true;
+        // Keep the existing filename if the app already defines one.
+        let baseName = "DJIS_ID_Photo";
+        const candidates = [
+            window.currentFilename,
+            window.outputFilename,
+            window.photoFilename,
+            window.fileName
+        ];
+
+        for (const value of candidates) {
+            if (typeof value === "string" && value.trim()) {
+                baseName = value.trim().replace(/\.[^.]+$/, "");
+                break;
+            }
+        }
+
+        const url = URL.createObjectURL(processed);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${baseName}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+
+        if (typeof setStatus === "function") {
+            setStatus("Background removed — PNG downloaded.");
+        }
+
+        return processed;
     } catch (error) {
-        console.error("Automatic background removal failed:", error);
-        setAutoBgStatus(
-            `Automatic background removal failed: ${error.message}`,
-            true
-        );
-        return false;
+        console.error("Local background removal failed:", error);
+        if (typeof setStatus === "function") {
+            setStatus("Background removal failed. Check your internet connection and try again.");
+        }
+        return null;
     }
 }
-
-(function initAutoBgControls(){
-    const endpoint = document.getElementById("autoBgEndpoint");
-    if (endpoint) {
-        endpoint.value = AUTO_BG_DEFAULT_ENDPOINT;
-        endpoint.addEventListener("change", () => {
-            localStorage.setItem("djis_bg_endpoint", endpoint.value.trim());
-        });
-    }
-})();
 
 </script>
 
