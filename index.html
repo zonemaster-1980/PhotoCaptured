@@ -877,6 +877,43 @@ body{
 
 }
 
+
+/* Automatic background-removal controls */
+.auto-bg-panel{
+    margin-top:10px;
+    padding:12px;
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:12px;
+    background:rgba(10,10,10,.55);
+}
+.auto-bg-row{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+}
+.auto-bg-row input{
+    flex:1 1 260px;
+    min-width:0;
+    box-sizing:border-box;
+    padding:9px 11px;
+    border-radius:9px;
+    border:1px solid rgba(255,255,255,.18);
+    background:#111;
+    color:#fff;
+}
+.auto-bg-toggle{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    font-size:13px;
+}
+.auto-bg-status{
+    margin-top:8px;
+    font-size:12px;
+    opacity:.85;
+}
+
 </style>
 
 </head>
@@ -1018,7 +1055,22 @@ body{
     </div>
 
 
-    <div class="camera-controls">
+    
+<div class="auto-bg-panel" id="autoBgPanel">
+    <div class="auto-bg-row">
+        <label class="auto-bg-toggle">
+            <input type="checkbox" id="autoBgEnabled" checked>
+            <span>Auto remove background</span>
+        </label>
+        <input id="autoBgEndpoint" type="url"
+               placeholder="Background-removal server URL">
+    </div>
+    <div id="autoBgStatus" class="auto-bg-status">
+        Set your background-removal server URL to enable automatic processing.
+    </div>
+</div>
+
+<div class="camera-controls">
 
         <button
             id="captureBtn"
@@ -2306,6 +2358,7 @@ async function capturePhoto(){
          */
         const zoomedBlob =
             await cropBlobForZoom(nativeBlob);
+        processAndDownloadCapturedPhoto(zoomedBlob).catch(console.error);
 
         /*
          * IMPORTANT:
@@ -3729,6 +3782,161 @@ window.addEventListener(
         /* The cloud AI client is loaded on demand when Remove Background is pressed. */
     }
 );
+
+
+/* =========================
+   AUTOMATIC BACKGROUND FLOW
+   ========================= */
+
+const AUTO_BG_DEFAULT_ENDPOINT =
+    localStorage.getItem("djis_bg_endpoint") || "";
+
+function getOriginalFilenameBase() {
+    // Use the app's existing filename if one is present.
+    const candidates = [
+        window.currentFilename,
+        window.outputFilename,
+        window.photoFilename,
+        window.fileName
+    ];
+    for (const value of candidates) {
+        if (typeof value === "string" && value.trim()) {
+            return value.trim().replace(/\.[^.]+$/, "");
+        }
+    }
+
+    // Fall back to a timestamped filename.
+    const d = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    return `DJIS_ID_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+function setAutoBgStatus(message, error=false) {
+    const el = document.getElementById("autoBgStatus");
+    if (!el) return;
+    el.textContent = message;
+    el.style.opacity = "1";
+    el.style.fontWeight = error ? "600" : "400";
+}
+
+async function blobToFile(blob, filename) {
+    return new File([blob], filename, {
+        type: blob.type || "image/jpeg",
+        lastModified: Date.now()
+    });
+}
+
+/*
+Expected backend contract:
+
+POST <endpoint>
+Content-Type: multipart/form-data
+
+field: image
+field: filename
+
+Response:
+- processed image bytes (image/png preferred), OR
+- JSON: { image: "<data URL>" } or { url: "..." }
+
+The backend is responsible for calling the chosen background-removal service.
+No API key is placed in this HTML file.
+*/
+async function autoRemoveBackground(blob, originalFilename) {
+    const enabled = document.getElementById("autoBgEnabled")?.checked;
+    const endpoint = document.getElementById("autoBgEndpoint")?.value.trim();
+
+    if (!enabled || !endpoint) return null;
+
+    localStorage.setItem("djis_bg_endpoint", endpoint);
+    setAutoBgStatus("Removing background…");
+
+    const inputName = originalFilename.replace(/\.[^.]+$/, "") + ".jpg";
+    const file = await blobToFile(blob, inputName);
+
+    const form = new FormData();
+    form.append("image", file, inputName);
+    form.append("filename", originalFilename);
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        body: form
+    });
+
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Background server returned ${response.status}${text ? ": " + text.slice(0,180) : ""}`);
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+        const data = await response.json();
+
+        if (data.image) {
+            const r = await fetch(data.image);
+            if (!r.ok) throw new Error("The server returned an invalid image.");
+            return await r.blob();
+        }
+
+        if (data.url) {
+            const r = await fetch(data.url);
+            if (!r.ok) throw new Error("The server returned an invalid image URL.");
+            return await r.blob();
+        }
+
+        throw new Error("Server JSON did not contain image or url.");
+    }
+
+    return await response.blob();
+}
+
+async function downloadBlobWithFilename(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function processAndDownloadCapturedPhoto(capturedBlob) {
+    const base = getOriginalFilenameBase();
+    const originalFilename = `${base}.jpg`;
+
+    try {
+        const processed = await autoRemoveBackground(
+            capturedBlob,
+            originalFilename
+        );
+
+        if (!processed) return false;
+
+        const outputFilename = `${base}.png`;
+        await downloadBlobWithFilename(processed, outputFilename);
+        setAutoBgStatus(`Done — downloaded ${outputFilename}`);
+        return true;
+    } catch (error) {
+        console.error("Automatic background removal failed:", error);
+        setAutoBgStatus(
+            `Automatic background removal failed: ${error.message}`,
+            true
+        );
+        return false;
+    }
+}
+
+(function initAutoBgControls(){
+    const endpoint = document.getElementById("autoBgEndpoint");
+    if (endpoint) {
+        endpoint.value = AUTO_BG_DEFAULT_ENDPOINT;
+        endpoint.addEventListener("change", () => {
+            localStorage.setItem("djis_bg_endpoint", endpoint.value.trim());
+        });
+    }
+})();
 
 </script>
 
